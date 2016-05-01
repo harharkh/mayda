@@ -1,0 +1,10 @@
+[package]
+name = "pfor_codec"
+version = "0.0.1"
+authors = ["jkylemason"]
+
+[lib]
+name = "pfor_codec"
+
+[dependencies]
+pfor_macros = { path = "../pfor_macros", version = "0.0.1" }
