@@ -124,7 +124,7 @@
 #![feature(quote)]
 #![feature(inclusive_range_syntax)]
 
-// Unused import in quote_tokens!
+// Unused import in quote_tokens! macro
 #![allow(unused_imports)]
 
 extern crate rustc_plugin;
@@ -154,7 +154,7 @@ pub fn plugin_registrar(reg: &mut Registry) {
 fn encode_expand(cx: &mut ExtCtxt,
                  sp: codemap::Span,
                  tts: &[ast::TokenTree]) -> Box<MacResult + 'static> {
-  // Arguments to the macro
+  // Arguments to the macro invocation
   let (path, width, step) = {
     match parse(cx, sp, tts) {
       Some(x) => x,
@@ -191,17 +191,19 @@ fn encode_expand(cx: &mut ExtCtxt,
           let rsft = i_bits - s_bits;
           tokens = {
             if rsft == 0 {
-              quote_tokens!(cx, $tokens *i_ptr as u32;)
+              quote_tokens!(cx, $tokens
+                *i_ptr as u32;
+              )
             } else {
-              quote_tokens!(cx, $tokens (*i_ptr >> $rsft) as u32;)
+              quote_tokens!(cx, $tokens
+                (*i_ptr >> $rsft) as u32;
+              )
             }
           };
 
           i_bits -= s_bits;
           s_bits = 32;
-
-          tokens = quote_tokens!(cx,
-            $tokens
+          tokens = quote_tokens!(cx, $tokens
             s_ptr = s_ptr.offset(1);
             *s_ptr =
           );
@@ -210,29 +212,29 @@ fn encode_expand(cx: &mut ExtCtxt,
         let lsft = s_bits - i_bits;
         tokens = {
           if lsft == 0 {
-            quote_tokens!(cx, $tokens *i_ptr as u32;)
+            quote_tokens!(cx, $tokens
+              *i_ptr as u32;
+            )
           } else {
-            quote_tokens!(cx, $tokens (*i_ptr as u32) << $lsft;)
+            quote_tokens!(cx, $tokens
+              (*i_ptr as u32) << $lsft;
+            )
           }
         };
 
-        s_bits -= i_bits;
         if a < (*ln - 1) {
-          tokens = quote_tokens!(cx,
-            $tokens
+          s_bits -= i_bits;
+          tokens = quote_tokens!(cx, $tokens
             i_ptr = i_ptr.offset(1);
           );
-
           if s_bits == 0 {
             s_bits = 32;
-            tokens = quote_tokens!(cx,
-              $tokens
+            tokens = quote_tokens!(cx, $tokens
               s_ptr = s_ptr.offset(1);
               *s_ptr =
             );
           } else {
-            tokens = quote_tokens!(cx,
-              $tokens
+            tokens = quote_tokens!(cx, $tokens
               *s_ptr |=
             );
           }
@@ -281,7 +283,7 @@ fn encode_expand(cx: &mut ExtCtxt,
 fn decode_expand(cx: &mut ExtCtxt,
                  sp: codemap::Span,
                  tts: &[ast::TokenTree]) -> Box<MacResult + 'static> {
-  // Arguments to the macro
+  // Arguments to the macro invocation
   let (path, width, step) = {
     match parse(cx, sp, tts) {
       Some(x) => x,
@@ -291,15 +293,6 @@ fn decode_expand(cx: &mut ExtCtxt,
 
   // Number of integers encoded
   let lengths: Vec<usize> = (1...(32 / step)).map(|a| a * step).collect();
-
-  // Used to construct a function body
-  let mut block = ast::Block {
-    stmts: Vec::new(),
-    expr: None,
-    id: ast::DUMMY_NODE_ID,
-    rules: ast::BlockCheckMode::Default,
-    span: codemap::DUMMY_SP,
-  };
 
   // idents: tokens used to define the const DECODE_T
   // items: definitions of the functions
@@ -315,86 +308,100 @@ fn decode_expand(cx: &mut ExtCtxt,
       idents.push(token::Comma);
 
       // Function definition constructed here
-      block.stmts.clear();
       let mut o_bits: usize;
       let mut s_bits: usize = 32;
-      let mut tokens;
+      let mut tokens: Vec<ast::TokenTree> = Vec::new();
+
       // For every integer to be decoded...
-      for _ in 0..*ln {
+      for a in 0..*ln {
         o_bits = wd;
-        tokens = quote_tokens!(cx, *o_ptr =);
+        tokens = quote_tokens!(cx, $tokens
+          *o_ptr =
+        );
         // While the integer requires more bits than the current word...
         while o_bits > s_bits {
           let mask = !0u32 >> (32 - s_bits);
           let lsft = o_bits - s_bits;
-          let stmt = {
+          tokens = {
             match (s_bits, lsft) {
               (32, 0) => {
-                quote_stmt!(cx, $tokens *s_ptr as $path;)
+                quote_tokens!(cx, $tokens
+                  *s_ptr as $path;
+                )
               }
               (32, _) => {
-                quote_stmt!(cx, $tokens (*s_ptr as $path) << $lsft;)
+                quote_tokens!(cx, $tokens
+                  (*s_ptr as $path) << $lsft;
+                )
               }
               (_, 0) => {
-                quote_stmt!(cx, $tokens (*s_ptr & $mask) as $path;)
+                quote_tokens!(cx, $tokens
+                  (*s_ptr & $mask) as $path;
+                )
               }
               (_, _) => {
-                quote_stmt!(cx, $tokens ((*s_ptr & $mask) as $path) << $lsft;)
+                quote_tokens!(cx, $tokens
+                  ((*s_ptr & $mask) as $path) << $lsft;
+                )
               }
             }
-          }.unwrap();
-          block.stmts.push(stmt);
-          tokens = quote_tokens!(cx, *o_ptr |=);
+          };
 
           o_bits -= s_bits;
           s_bits = 32;
-
-          let stmt = quote_stmt!(cx, s_ptr = s_ptr.offset(1);).unwrap();
-          block.stmts.push(stmt);
+          tokens = quote_tokens!(cx, $tokens
+            s_ptr = s_ptr.offset(1);
+            *o_ptr |=
+          );
         }
 
         // Decode any bits that remain
         let mask = !0u32 >> (32 - s_bits);
         let rsft = s_bits - o_bits;
-        let stmt = {
+        tokens = {
           match (s_bits, rsft) {
             (32, 0) => {
-              quote_stmt!(cx, $tokens *s_ptr as $path;)
+              quote_tokens!(cx, $tokens
+                *s_ptr as $path;
+              )
             }
             (32, _) => {
-              quote_stmt!(cx, $tokens (*s_ptr >> $rsft) as $path;)
+              quote_tokens!(cx, $tokens
+                (*s_ptr >> $rsft) as $path;
+              )
             }
             (_, 0) => {
-              quote_stmt!(cx, $tokens (*s_ptr & $mask) as $path;)
+              quote_tokens!(cx, $tokens
+                (*s_ptr & $mask) as $path;
+              )
             }
             (_, _) => {
-              quote_stmt!(cx, $tokens ((*s_ptr & $mask) >> $rsft) as $path;)
+              quote_tokens!(cx, $tokens
+                ((*s_ptr & $mask) >> $rsft) as $path;
+              )
             }
           }
-        }.unwrap();
-        block.stmts.push(stmt);
-
-        s_bits -= o_bits;
-        if s_bits == 0 {
-          s_bits = 32;
-
-          let stmt = quote_stmt!(cx, s_ptr = s_ptr.offset(1);).unwrap();
-          block.stmts.push(stmt);
+        };
+        if a < (*ln - 1) {
+          s_bits -= o_bits;
+          if s_bits == 0 {
+            s_bits = 32;
+            tokens = quote_tokens!(cx, $tokens
+              s_ptr = s_ptr.offset(1);
+            );
+          }
+          tokens = quote_tokens!(cx, $tokens
+            o_ptr = o_ptr.offset(1);
+          );
         }
-
-        let stmt = quote_stmt!(cx, o_ptr = o_ptr.offset(1);).unwrap();
-        block.stmts.push(stmt);
       }
-      // Remove unnecessary offsets
-      block.stmts.pop();
-      if s_bits == 32 { block.stmts.pop(); }
 
       // Function definition pushed to items
       let item = quote_item!(cx,
         unsafe fn $ident(s_ptr: *const u32, o_ptr: *mut $path) {
           let mut s_ptr = s_ptr;
           let mut o_ptr = o_ptr;
-          $block
+          $tokens
         }
       ).unwrap();
       items.push(item);
@@ -506,7 +513,7 @@ fn parse(cx: &mut ExtCtxt,
 fn encode_simd_expand(cx: &mut ExtCtxt,
                       sp: codemap::Span,
                       tts: &[ast::TokenTree]) -> Box<MacResult + 'static> {
-  // Arguments to the macro
+  // Arguments to the macro invocation
   let (path, width) = {
     match parse_simd(cx, sp, tts) {
       Some(x) => x,
@@ -542,8 +549,7 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
         let rsft = i_bits - s_bits;
         tokens = {
           if rsft == 0 {
-            quote_tokens!(cx,
-              $tokens
+            quote_tokens!(cx, $tokens
               let rhs = simd::u32x4::new(
                 *i_ptr as u32,
                 *i_ptr.offset(1) as u32,
@@ -553,8 +559,7 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
               lhs = lhs | rhs;
             )
           } else {
-            quote_tokens!(cx,
-              $tokens
+            quote_tokens!(cx, $tokens
               let rhs = simd::u32x4::new(
                 (*i_ptr >> $rsft) as u32,
                 (*i_ptr.offset(1) >> $rsft) as u32,
@@ -569,8 +574,7 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
         i_bits -= s_bits;
         s_bits = 32;
 
-        tokens = quote_tokens!(cx,
-          $tokens
+        tokens = quote_tokens!(cx, $tokens
           lhs.store(std::slice::from_raw_parts_mut(s_ptr, 4), 0);
           s_ptr = s_ptr.offset(4);
           lhs = simd::u32x4::splat(0);
@@ -580,8 +584,7 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
       let lsft = s_bits - i_bits;
       tokens = {
         if lsft == 0 {
-          quote_tokens!(cx,
-            $tokens
+          quote_tokens!(cx, $tokens
             let rhs = simd::u32x4::new(
               *i_ptr as u32,
               *i_ptr.offset(1) as u32,
@@ -591,8 +594,7 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
             lhs = lhs | rhs;
           )
         } else {
-          quote_tokens!(cx,
-            $tokens
+          quote_tokens!(cx, $tokens
             let rhs = simd::u32x4::new(
               *i_ptr as u32,
               *i_ptr.offset(1) as u32,
@@ -608,21 +610,18 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
       if s_bits == 0 {
         s_bits = 32;
         
-        tokens = quote_tokens!(cx,
-          $tokens
+        tokens = quote_tokens!(cx, $tokens
           lhs.store(std::slice::from_raw_parts_mut(s_ptr, 4), 0);
         );
         if a < 31 {
-          tokens = quote_tokens!(cx,
-            $tokens
+          tokens = quote_tokens!(cx, $tokens
             s_ptr = s_ptr.offset(4);
             lhs = simd::u32x4::splat(0);
           );
         }
       }
       if a < 31 {
-        tokens = quote_tokens!(cx,
-          $tokens
+        tokens = quote_tokens!(cx, $tokens
           i_ptr = i_ptr.offset(4);
         );
       }
@@ -666,7 +665,7 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
 fn decode_simd_expand(cx: &mut ExtCtxt,
                       sp: codemap::Span,
                       tts: &[ast::TokenTree]) -> Box<MacResult + 'static> {
-  // Arguments to the macro
+  // Arguments to the macro invocation
   let (path, width) = {
     match parse_simd(cx, sp, tts) {
       Some(x) => x,
@@ -697,8 +696,7 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
     // For every integer to be decoded...
     for a in 0..32 {
       o_bits = wd;
-      tokens = quote_tokens!(cx,
-        $tokens
+      tokens = quote_tokens!(cx, $tokens
         *o_ptr = 0;
         *o_ptr.offset(1) = 0;
         *o_ptr.offset(2) = 0;
@@ -711,8 +709,7 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
         tokens = {
           match (s_bits, lsft) {
             (32, 0) => {
-              quote_tokens!(cx,
-                $tokens
+              quote_tokens!(cx, $tokens
                 *o_ptr |= rhs.extract(0) as $path;
                 *o_ptr.offset(1) |= rhs.extract(1) as $path;
                 *o_ptr.offset(2) |= rhs.extract(2) as $path;
@@ -720,8 +717,7 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
               )
             }
             (32, _) => {
-              quote_tokens!(cx,
-                $tokens
+              quote_tokens!(cx, $tokens
                 *o_ptr |= (rhs.extract(0) as $path) << $lsft;
                 *o_ptr.offset(1) |= (rhs.extract(1) as $path) << $lsft;
                 *o_ptr.offset(2) |= (rhs.extract(2) as $path) << $lsft;
@@ -729,8 +725,7 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
               )
             }
             (_, 0) => {
-              quote_tokens!(cx,
-                $tokens
+              quote_tokens!(cx, $tokens
                 let lhs = rhs & simd::u32x4::splat($mask);
                 *o_ptr |= lhs.extract(0) as $path;
                 *o_ptr.offset(1) |= lhs.extract(1) as $path;
@@ -739,8 +734,7 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
               )
             }
             (_, _) => {
-              quote_tokens!(cx,
-                $tokens
+              quote_tokens!(cx, $tokens
                 let lhs = rhs & simd::u32x4::splat($mask);
                 *o_ptr |= (lhs.extract(0) as $path) << $lsft;
                 *o_ptr.offset(1) |= (lhs.extract(1) as $path) << $lsft;
@@ -754,8 +748,7 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
         o_bits -= s_bits;
         s_bits = 32;
 
-        tokens = quote_tokens!(cx,
-          $tokens
+        tokens = quote_tokens!(cx, $tokens
           s_ptr = s_ptr.offset(4);
           let rhs = simd::u32x4::load(std::slice::from_raw_parts(s_ptr, 4), 0);
         );
@@ -766,8 +759,7 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
       tokens = {
         match (s_bits, rsft) {
           (32, 0) => {
-            quote_tokens!(cx,
-              $tokens
+            quote_tokens!(cx, $tokens
               *o_ptr |= rhs.extract(0) as $path;
               *o_ptr.offset(1) |= rhs.extract(1) as $path;
               *o_ptr.offset(2) |= rhs.extract(2) as $path;
@@ -775,8 +767,7 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
             )
           }
           (32, _) => {
-            quote_tokens!(cx,
-              $tokens
+            quote_tokens!(cx, $tokens
               let lhs = rhs >> $rsft;
               *o_ptr |= lhs.extract(0) as $path;
               *o_ptr.offset(1) |= lhs.extract(1) as $path;
@@ -785,8 +776,7 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
             )
           }
           (_, 0) => {
-            quote_tokens!(cx,
-              $tokens
+            quote_tokens!(cx, $tokens
               let lhs = rhs & simd::u32x4::splat($mask);
               *o_ptr |= lhs.extract(0) as $path;
               *o_ptr.offset(1) |= lhs.extract(1) as $path;
@@ -795,8 +785,7 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
             )
           }
           (_, _) => {
-            quote_tokens!(cx,
-              $tokens
+            quote_tokens!(cx, $tokens
               let lhs = (rhs & simd::u32x4::splat($mask)) >> $rsft;
               *o_ptr |= lhs.extract(0) as $path;
               *o_ptr.offset(1) |= lhs.extract(1) as $path;
@@ -807,21 +796,16 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
         }
       };
 
-      s_bits -= o_bits;
-      if s_bits == 0 {
-        s_bits = 32;
-
-        if a < 31 {
-          tokens = quote_tokens!(cx,
-            $tokens
+      if a < 31 {
+        s_bits -= o_bits;
+        if s_bits == 0 {
+          s_bits = 32;
+          tokens = quote_tokens!(cx, $tokens
             s_ptr = s_ptr.offset(4);
             let rhs = simd::u32x4::load(std::slice::from_raw_parts(s_ptr, 4), 0);
           );
         }
-      }
-      if a < 31 {
-        tokens = quote_tokens!(cx,
-          $tokens
+        tokens = quote_tokens!(cx, $tokens
           o_ptr = o_ptr.offset(4);
         );
       }
@@ -860,7 +844,8 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
   MacEager::items(small_vector::SmallVector::many(items))
 }
 
-/// Parse the two arguments to the encode and decode syntax extensions.
+/// Parse the two arguments to the encode_simd and decode_simd syntax
+/// extensions.
 fn parse_simd(cx: &mut ExtCtxt,
               sp: codemap::Span,
               tts: &[ast::TokenTree]) -> Option<(ast::Path, usize)> {
