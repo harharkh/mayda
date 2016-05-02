@@ -31,7 +31,7 @@ pub trait Bits {
 }
 
 macro_rules! bits_impl {
-  ($(($t: ty, $name: expr, $size: expr)),*) => ($(
+  ($(($t: ty: $name: expr, $size: expr))*) => ($(
     impl Bits for $t {
       #[inline]
       fn name() -> &'static str { $name }
@@ -44,11 +44,11 @@ macro_rules! bits_impl {
 }
 
 bits_impl!{
-  (u8, "u8", 8),
-  (u16, "u16", 16),
-  (u32, "u32", 32),
-  (u64, "u64", 64),
-  (usize, "usize", mem::size_of::<usize>() * 8)
+  (u8: "u8", 8)
+  (u16: "u16", 16)
+  (u32: "u32", 32)
+  (u64: "u64", 64)
+  (usize: "usize", mem::size_of::<usize>() * 8)
 }
 
 /// Indicates that the type can be encoded and decoded by pfor.

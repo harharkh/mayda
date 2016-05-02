@@ -120,7 +120,12 @@ impl<U: Bits> Encodable<U> for Binary {
 
 macro_rules! encodable_impl {
   // $t should be a type, but is an ident to satisfy compiler
-  ($(($t: ident, $step: expr, $encode_simd: ident, $decode_simd: ident, $encode: ident, $decode: ident)),*) => ($(
+  ($(($t: ident:
+      $step: expr,
+      $encode: ident,
+      $decode: ident,
+      $encode_simd: ident,
+      $decode_simd: ident))*) => ($(
     impl Encodable<$t> for Binary {
       fn encode(&mut self, input: &[$t]) {
         // Nothing to do
@@ -134,7 +139,7 @@ macro_rules! encodable_impl {
         let mut storage = Vec::with_capacity(
           if blocks == 1 { 3 } else { 1 + 5 * blocks }
         );
-
+ 
         // Pointers avoid memory initialization, bounds checking, slice
         // construction, etc. Use offset instead of changing s_ptr, storage can
         // be reallocated
@@ -376,8 +381,8 @@ macro_rules! encodable_impl {
 }
 
 encodable_impl!{
-  (u8, 8, ENCODE_SIMD_U8_ARRAY, DECODE_SIMD_U8_ARRAY, ENCODE_U8_ARRAY,  DECODE_U8_ARRAY),
-  (u16, 8, ENCODE_SIMD_U16_ARRAY, DECODE_SIMD_U16_ARRAY, ENCODE_U16_ARRAY, DECODE_U16_ARRAY),
-  (u32, 8, ENCODE_SIMD_U32_ARRAY, DECODE_SIMD_U32_ARRAY, ENCODE_U32_ARRAY, DECODE_U32_ARRAY),
-  (u64, 8, ENCODE_SIMD_U64_ARRAY, DECODE_SIMD_U64_ARRAY, ENCODE_U64_ARRAY, DECODE_U64_ARRAY)
+  (u8: 8, ENCODE_U8, DECODE_U8, ENCODE_SIMD_U8, DECODE_SIMD_U8) 
+  (u16: 8, ENCODE_U16, DECODE_U16, ENCODE_SIMD_U16, DECODE_SIMD_U16)
+  (u32: 8, ENCODE_U32, DECODE_U32, ENCODE_SIMD_U32, DECODE_SIMD_U32)
+  (u64: 8, ENCODE_U64, DECODE_U64, ENCODE_SIMD_U64, DECODE_SIMD_U64)
 }
