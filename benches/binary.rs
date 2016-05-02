@@ -1,3 +1,9 @@
+// Copyright 2016 Jeremy Mason
+//
+// Licensed under the MIT license <LICENSE or
+// http://opensource.org/licenses/MIT>. This file may not be copied, modified,
+// or distributed except according to those terms.
+
 #![feature(test)]
 
 #![allow(non_snake_case)]

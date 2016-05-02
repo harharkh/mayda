@@ -1,9 +1,17 @@
+// Copyright 2016 Jeremy Mason
+//
+// Licensed under the MIT license <LICENSE or
+// http://opensource.org/licenses/MIT>. This file may not be copied, modified,
+// or distributed except according to those terms.
+
 #![allow(non_snake_case)]
 
 extern crate pfor;
+extern crate rand;
 
 use pfor::utility::Encodable;
 use pfor::binary::Binary;
+use rand::distributions::{IndependentSample, Range};
 
 macro_rules! constant_values {
   ($(($t: ty: $value: expr, $length: expr, $name: ident))*) => ($(
@@ -252,4 +260,34 @@ varied_values!{
   (u16: vv_u16_9)
   (u32: vv_u32_9)
   (u64: vv_u64_9)
+}
+
+macro_rules! random_values {
+  ($(($t: ty: $min: expr, $max: expr, $length: expr, $name: ident))*) => ($(
+    #[test]
+    fn $name() {
+      let mut bin = Binary::new();
+      let mut input: Vec<$t> = Vec::new();
+      let between = Range::new($min, $max);
+      let mut rng = rand::thread_rng();
+      for _ in 0..$length {
+        input.push(between.ind_sample(&mut rng));
+      }
+      bin.encode(&input);
+      let output = bin.decode().unwrap();
+      println!("{:?}", input);
+      for a in bin.storage() {
+        println!("{:032b}", a);
+      }
+      println!("{:?}", output);
+      assert_eq!(input, output);
+    }
+  )*)
+}
+
+random_values!{
+  (u8: 0, std::u8::MAX, 256, rv_u8_0_MAX_256)
+  (u16: 0, std::u16::MAX, 256, rv_u16_0_MAX_256)
+  (u32: 0, std::u32::MAX, 256, rv_u32_0_MAX_256)
+  (u64: 0, std::u64::MAX, 256, rv_u64_0_MAX_256)
 }
