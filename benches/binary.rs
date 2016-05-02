@@ -38,8 +38,7 @@ macro_rules! decode_bench {
       assert_eq!(input, output);
     }
   )*)
-}
-
+} 
 macro_rules! vector_bench {
   ($(($t: ty, $value: expr, $length: expr, $name: ident)),*) => ($(
     #[bench]

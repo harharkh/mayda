@@ -8,3 +8,4 @@ name = "pfor_codec"
 
 [dependencies]
 pfor_macros = { path = "../pfor_macros", version = "0.0.1" }
+simd = { git = "https://github.com/huonw/simd" }

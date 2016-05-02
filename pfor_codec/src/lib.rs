@@ -14,6 +14,8 @@
 
 #![allow(unused_mut)]
 
+extern crate simd;
+
 encode!(u8, 8, 8);
 decode!(u8, 8, 8);
 encode!(u16, 16, 8);
@@ -22,3 +24,12 @@ encode!(u32, 32, 8);
 decode!(u32, 32, 8);
 encode!(u64, 64, 8);
 decode!(u64, 64, 8);
+
+encode_simd!(u8, 8);
+decode_simd!(u8, 8);
+encode_simd!(u16, 16);
+decode_simd!(u16, 16);
+encode_simd!(u32, 32);
+decode_simd!(u32, 32);
+encode_simd!(u64, 64);
+decode_simd!(u64, 64);

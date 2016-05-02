@@ -6,3 +6,6 @@ authors = ["jkylemason"]
 [lib]
 name = "pfor_macros"
 plugin = true
+
+[dependencies]
+simd = { git = "https://github.com/huonw/simd" }
