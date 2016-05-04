@@ -15,9 +15,9 @@
 //! of 32). Functions are generated for numbers of bits in [1...max_bits], and
 //! for numbers of integers in multiples of the step up to 32.
 //!
-//! Pointers to the generated functions are available in ENCODE_T_ARRAY and
-//! DECODE_T_ARRAY. These are public constant arrays, with the pointer for 
-//! encode_T_a_b at ENCODE_T_ARRAY[a - 1][b / c - 1], where c is the step.
+//! Pointers to the generated functions are available in ENCODE_T and DECODE_T.
+//! These are public constant arrays, with the pointer for encode_T_a_b at 
+//! ENCODE_T[a - 1][b / c - 1], where c is the step.
 //! 
 //! # Safety
 //!
@@ -43,83 +43,79 @@
 //! unsafe fn encode_u64_48_8(i_ptr: *const u64, s_ptr: *mut u32) {
 //!     let mut i_ptr = i_ptr;
 //!     let mut s_ptr = s_ptr;
-//!     {
-//!         *s_ptr = (*i_ptr >> 16usize) as u32;
-//!         s_ptr = s_ptr.offset(1);
-//!         *s_ptr = (*i_ptr as u32) << 16usize;
-//!         i_ptr = i_ptr.offset(1);
-//!         *s_ptr |= (*i_ptr >> 32usize) as u32;
-//!         s_ptr = s_ptr.offset(1);
-//!         *s_ptr = *i_ptr as u32;
-//!         s_ptr = s_ptr.offset(1);
-//!         i_ptr = i_ptr.offset(1);
-//!         *s_ptr = (*i_ptr >> 16usize) as u32;
-//!         s_ptr = s_ptr.offset(1);
-//!         *s_ptr = (*i_ptr as u32) << 16usize;
-//!         i_ptr = i_ptr.offset(1);
-//!         *s_ptr |= (*i_ptr >> 32usize) as u32;
-//!         s_ptr = s_ptr.offset(1);
-//!         *s_ptr = *i_ptr as u32;
-//!         s_ptr = s_ptr.offset(1);
-//!         i_ptr = i_ptr.offset(1);
-//!         *s_ptr = (*i_ptr >> 16usize) as u32;
-//!         s_ptr = s_ptr.offset(1);
-//!         *s_ptr = (*i_ptr as u32) << 16usize;
-//!         i_ptr = i_ptr.offset(1);
-//!         *s_ptr |= (*i_ptr >> 32usize) as u32;
-//!         s_ptr = s_ptr.offset(1);
-//!         *s_ptr = *i_ptr as u32;
-//!         s_ptr = s_ptr.offset(1);
-//!         i_ptr = i_ptr.offset(1);
-//!         *s_ptr = (*i_ptr >> 16usize) as u32;
-//!         s_ptr = s_ptr.offset(1);
-//!         *s_ptr = (*i_ptr as u32) << 16usize;
-//!         i_ptr = i_ptr.offset(1);
-//!         *s_ptr |= (*i_ptr >> 32usize) as u32;
-//!         s_ptr = s_ptr.offset(1);
-//!         *s_ptr = *i_ptr as u32;
-//!     }
+//!     *s_ptr = (*i_ptr >> 16usize) as u32;
+//!     s_ptr = s_ptr.offset(1);
+//!     *s_ptr = (*i_ptr as u32) << 16usize;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= (*i_ptr >> 32usize) as u32;
+//!     s_ptr = s_ptr.offset(1);
+//!     *s_ptr = *i_ptr as u32;
+//!     s_ptr = s_ptr.offset(1);
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr = (*i_ptr >> 16usize) as u32;
+//!     s_ptr = s_ptr.offset(1);
+//!     *s_ptr = (*i_ptr as u32) << 16usize;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= (*i_ptr >> 32usize) as u32;
+//!     s_ptr = s_ptr.offset(1);
+//!     *s_ptr = *i_ptr as u32;
+//!     s_ptr = s_ptr.offset(1);
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr = (*i_ptr >> 16usize) as u32;
+//!     s_ptr = s_ptr.offset(1);
+//!     *s_ptr = (*i_ptr as u32) << 16usize;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= (*i_ptr >> 32usize) as u32;
+//!     s_ptr = s_ptr.offset(1);
+//!     *s_ptr = *i_ptr as u32;
+//!     s_ptr = s_ptr.offset(1);
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr = (*i_ptr >> 16usize) as u32;
+//!     s_ptr = s_ptr.offset(1);
+//!     *s_ptr = (*i_ptr as u32) << 16usize;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= (*i_ptr >> 32usize) as u32;
+//!     s_ptr = s_ptr.offset(1);
+//!     *s_ptr = *i_ptr as u32;
 //! }
 //!
 //! unsafe fn decode_u64_48_8(s_ptr: *const u32, o_ptr: *mut u64) {
 //!     let mut s_ptr = s_ptr;
 //!     let mut o_ptr = o_ptr;
-//!     {
-//!         *o_ptr = (*s_ptr as u64) << 16usize;
-//!         s_ptr = s_ptr.offset(1);
-//!         *o_ptr |= (*s_ptr >> 16usize) as u64;
-//!         o_ptr = o_ptr.offset(1);
-//!         *o_ptr = ((*s_ptr & 65535u32) as u64) << 32usize;
-//!         s_ptr = s_ptr.offset(1);
-//!         *o_ptr |= *s_ptr as u64;
-//!         s_ptr = s_ptr.offset(1);
-//!         o_ptr = o_ptr.offset(1);
-//!         *o_ptr = (*s_ptr as u64) << 16usize;
-//!         s_ptr = s_ptr.offset(1);
-//!         *o_ptr |= (*s_ptr >> 16usize) as u64;
-//!         o_ptr = o_ptr.offset(1);
-//!         *o_ptr = ((*s_ptr & 65535u32) as u64) << 32usize;
-//!         s_ptr = s_ptr.offset(1);
-//!         *o_ptr |= *s_ptr as u64;
-//!         s_ptr = s_ptr.offset(1);
-//!         o_ptr = o_ptr.offset(1);
-//!         *o_ptr = (*s_ptr as u64) << 16usize;
-//!         s_ptr = s_ptr.offset(1);
-//!         *o_ptr |= (*s_ptr >> 16usize) as u64;
-//!         o_ptr = o_ptr.offset(1);
-//!         *o_ptr = ((*s_ptr & 65535u32) as u64) << 32usize;
-//!         s_ptr = s_ptr.offset(1);
-//!         *o_ptr |= *s_ptr as u64;
-//!         s_ptr = s_ptr.offset(1);
-//!         o_ptr = o_ptr.offset(1);
-//!         *o_ptr = (*s_ptr as u64) << 16usize;
-//!         s_ptr = s_ptr.offset(1);
-//!         *o_ptr |= (*s_ptr >> 16usize) as u64;
-//!         o_ptr = o_ptr.offset(1);
-//!         *o_ptr = ((*s_ptr & 65535u32) as u64) << 32usize;
-//!         s_ptr = s_ptr.offset(1);
-//!         *o_ptr |= *s_ptr as u64;
-//!     }
+//!     *o_ptr = (*s_ptr as u64) << 16usize;
+//!     s_ptr = s_ptr.offset(1);
+//!     *o_ptr |= (*s_ptr >> 16usize) as u64;
+//!     o_ptr = o_ptr.offset(1);
+//!     *o_ptr = ((*s_ptr & 65535u32) as u64) << 32usize;
+//!     s_ptr = s_ptr.offset(1);
+//!     *o_ptr |= *s_ptr as u64;
+//!     s_ptr = s_ptr.offset(1);
+//!     o_ptr = o_ptr.offset(1);
+//!     *o_ptr = (*s_ptr as u64) << 16usize;
+//!     s_ptr = s_ptr.offset(1);
+//!     *o_ptr |= (*s_ptr >> 16usize) as u64;
+//!     o_ptr = o_ptr.offset(1);
+//!     *o_ptr = ((*s_ptr & 65535u32) as u64) << 32usize;
+//!     s_ptr = s_ptr.offset(1);
+//!     *o_ptr |= *s_ptr as u64;
+//!     s_ptr = s_ptr.offset(1);
+//!     o_ptr = o_ptr.offset(1);
+//!     *o_ptr = (*s_ptr as u64) << 16usize;
+//!     s_ptr = s_ptr.offset(1);
+//!     *o_ptr |= (*s_ptr >> 16usize) as u64;
+//!     o_ptr = o_ptr.offset(1);
+//!     *o_ptr = ((*s_ptr & 65535u32) as u64) << 32usize;
+//!     s_ptr = s_ptr.offset(1);
+//!     *o_ptr |= *s_ptr as u64;
+//!     s_ptr = s_ptr.offset(1);
+//!     o_ptr = o_ptr.offset(1);
+//!     *o_ptr = (*s_ptr as u64) << 16usize;
+//!     s_ptr = s_ptr.offset(1);
+//!     *o_ptr |= (*s_ptr >> 16usize) as u64;
+//!     o_ptr = o_ptr.offset(1);
+//!     *o_ptr = ((*s_ptr & 65535u32) as u64) << 32usize;
+//!     s_ptr = s_ptr.offset(1);
+//!     *o_ptr |= *s_ptr as u64;
 //! }
 //! ```
 
@@ -128,6 +124,7 @@
 #![feature(quote)]
 #![feature(inclusive_range_syntax)]
 
+// Unused import in quote_tokens! macro
 #![allow(unused_imports)]
 
 extern crate rustc_plugin;
@@ -149,12 +146,12 @@ pub fn plugin_registrar(reg: &mut Registry) {
   reg.register_macro("decode", decode_expand);
 }
 
-/// Generates ENCODE_T_ARRAY containing function pointers, with the pointer for
-/// encode_T_a_b at ENCODE_T_ARRAY[a - 1][b / c - 1].
+/// Generates ENCODE_T containing function pointers, with the pointer for
+/// encode_T_a_b at ENCODE_T[a - 1][b / c - 1].
 fn encode_expand(cx: &mut ExtCtxt,
                  sp: codemap::Span,
                  tts: &[ast::TokenTree]) -> Box<MacResult + 'static> {
-  // Arguments to the macro
+  // Arguments to the macro invocation
   let (path, width, step) = {
     match parse(cx, sp, tts) {
       Some(x) => x,
@@ -165,21 +162,7 @@ fn encode_expand(cx: &mut ExtCtxt,
   // Number of integers encoded
   let lengths: Vec<usize> = (1...(32 / step)).map(|a| a * step).collect();
 
-  // Used to construct a function body
-  let mut block = ast::Block {
-    stmts: Vec::new(), expr: None,
-    id: ast::DUMMY_NODE_ID,
-    rules: ast::BlockCheckMode::Default,
-    span: codemap::DUMMY_SP,
-  };
-
-  // Template for a statment of the block
-  let mut stmt = codemap::Spanned {
-    node: ast::StmtKind::Expr(quote_expr!(cx, {}), ast::DUMMY_NODE_ID),
-    span: codemap::DUMMY_SP,
-  };
-
-  // idents: tokens used to define the ENCODE_T_ARRAY
+  // idents: tokens used to define the ENCODE_T
   // items: definitions of the functions
   let mut idents = vec![token::OpenDelim(token::Bracket)];
   let mut items = Vec::new();
@@ -193,74 +176,74 @@ fn encode_expand(cx: &mut ExtCtxt,
       idents.push(token::Comma);
 
       // Function definition constructed here
-      block.stmts.clear();
       let mut i_bits: usize;
       let mut s_bits: usize = 32;
       let mut tokens = quote_tokens!(cx, *s_ptr =);
+
       // For every integer to be encoded...
-      for _ in 0..*ln {
+      for a in 0..*ln {
         i_bits = wd;
         // While the integer requires more bits than the current word...
         while i_bits > s_bits {
           let rsft = i_bits - s_bits;
-          let expr = {
+          tokens = {
             if rsft == 0 {
-              quote_expr!(cx, $tokens *i_ptr as u32;)
+              quote_tokens!(cx, $tokens
+                *i_ptr as u32;
+              )
             } else {
-              quote_expr!(cx, $tokens (*i_ptr >> $rsft) as u32;)
+              quote_tokens!(cx, $tokens
+                (*i_ptr >> $rsft) as u32;
+              )
             }
           };
-          stmt.node = ast::StmtKind::Expr(expr, ast::DUMMY_NODE_ID);
-          block.stmts.push(stmt.clone());
 
           i_bits -= s_bits;
           s_bits = 32;
-
-          let expr = quote_expr!(cx, s_ptr = s_ptr.offset(1););
-          stmt.node = ast::StmtKind::Expr(expr, ast::DUMMY_NODE_ID);
-          block.stmts.push(stmt.clone());
-
-          tokens = quote_tokens!(cx, *s_ptr =);
+          tokens = quote_tokens!(cx, $tokens
+            s_ptr = s_ptr.offset(1);
+            *s_ptr =
+          );
         }
         // Encode any bits that remain
         let lsft = s_bits - i_bits;
-        let expr = {
+        tokens = {
           if lsft == 0 {
-            quote_expr!(cx, $tokens *i_ptr as u32;)
+            quote_tokens!(cx, $tokens
+              *i_ptr as u32;
+            )
           } else {
-            quote_expr!(cx, $tokens (*i_ptr as u32) << $lsft;)
+            quote_tokens!(cx, $tokens
+              (*i_ptr as u32) << $lsft;
+            )
           }
         };
-        stmt.node = ast::StmtKind::Expr(expr, ast::DUMMY_NODE_ID);
-        block.stmts.push(stmt.clone());
 
-        s_bits -= i_bits;
-        if s_bits == 0 {
-          s_bits = 32;
-          
-          let expr = quote_expr!(cx, s_ptr = s_ptr.offset(1););
-          stmt.node = ast::StmtKind::Expr(expr, ast::DUMMY_NODE_ID);
-          block.stmts.push(stmt.clone());
-          
-          tokens = quote_tokens!(cx, *s_ptr =);
-        } else {
-          tokens = quote_tokens!(cx, *s_ptr |=);
+        if a < (*ln - 1) {
+          s_bits -= i_bits;
+          tokens = quote_tokens!(cx, $tokens
+            i_ptr = i_ptr.offset(1);
+          );
+          if s_bits == 0 {
+            s_bits = 32;
+            tokens = quote_tokens!(cx, $tokens
+              s_ptr = s_ptr.offset(1);
+              *s_ptr =
+            );
+          } else {
+            tokens = quote_tokens!(cx, $tokens
+              *s_ptr |=
+            );
+          }
         }
-
-        let expr = quote_expr!(cx, i_ptr = i_ptr.offset(1););
-        stmt.node = ast::StmtKind::Expr(expr, ast::DUMMY_NODE_ID);
-        block.stmts.push(stmt.clone());
       }
-      // Remove unnecessary offsets
-      block.stmts.pop();
-      if s_bits == 32 { block.stmts.pop(); }
 
       // Function definition pushed to items
       let item = quote_item!(cx,
         unsafe fn $ident(i_ptr: *const $path, s_ptr: *mut u32) {
           let mut i_ptr = i_ptr;
           let mut s_ptr = s_ptr;
-          $block
+          $tokens
         }
       ).unwrap();
       items.push(item);
@@ -276,8 +259,8 @@ fn encode_expand(cx: &mut ExtCtxt,
     .map(|token| ast::TokenTree::Token(codemap::DUMMY_SP, token))
     .collect();
 
-  // ENCODE_T_ARRAY definition pushed to items
-  let name = format!("encode_{}_array", path).to_uppercase();
+  // ENCODE_T definition pushed to items
+  let name = format!("encode_{}", path).to_uppercase();
   let ident = ast::Ident::with_empty_ctxt(token::intern(&*name));
   let ln = lengths.len();
   items.push(
@@ -292,12 +275,12 @@ fn encode_expand(cx: &mut ExtCtxt,
   MacEager::items(small_vector::SmallVector::many(items))
 }
 
-/// Generates DECODE_T_ARRAY containing function pointers, with the pointer for
-/// decode_T_a_b at DECODE_T_ARRAY[a - 1][b - 1].
+/// Generates DECODE_T containing function pointers, with the pointer for
+/// decode_T_a_b at DECODE_T[a - 1][b - 1].
 fn decode_expand(cx: &mut ExtCtxt,
                  sp: codemap::Span,
                  tts: &[ast::TokenTree]) -> Box<MacResult + 'static> {
-  // Arguments to the macro
+  // Arguments to the macro invocation
   let (path, width, step) = {
     match parse(cx, sp, tts) {
       Some(x) => x,
@@ -308,22 +291,7 @@ fn decode_expand(cx: &mut ExtCtxt,
   // Number of integers encoded
   let lengths: Vec<usize> = (1...(32 / step)).map(|a| a * step).collect();
 
-  // Used to construct a function body
-  let mut block = ast::Block {
-    stmts: Vec::new(),
-    expr: None,
-    id: ast::DUMMY_NODE_ID,
-    rules: ast::BlockCheckMode::Default,
-    span: codemap::DUMMY_SP,
-  };
-
-  // Template for a statment of the block
-  let mut stmt = codemap::Spanned {
-    node: ast::StmtKind::Expr(quote_expr!(cx, {}), ast::DUMMY_NODE_ID),
-    span: codemap::DUMMY_SP,
-  };
-
-  // idents: tokens used to define the const DECODE_T_ARRAY
+  // idents: tokens used to define the const DECODE_T
   // items: definitions of the functions
   let mut idents = vec![token::OpenDelim(token::Bracket)];
   let mut items = Vec::new();
@@ -337,91 +305,101 @@ fn decode_expand(cx: &mut ExtCtxt,
       idents.push(token::Comma);
 
       // Function definition constructed here
-      block.stmts.clear();
       let mut o_bits: usize;
       let mut s_bits: usize = 32;
-      let mut tokens;
+      let mut tokens: Vec<ast::TokenTree> = Vec::new();
+
       // For every integer to be decoded...
-      for _ in 0..*ln {
+      for a in 0..*ln {
         o_bits = wd;
-        tokens = quote_tokens!(cx, *o_ptr =);
+        tokens = quote_tokens!(cx, $tokens
+          *o_ptr =
+        );
         // While the integer requires more bits than the current word...
         while o_bits > s_bits {
           let mask = !0u32 >> (32 - s_bits);
           let lsft = o_bits - s_bits;
-          let expr = {
+          tokens = {
             match (s_bits, lsft) {
               (32, 0) => {
-                quote_expr!(cx, $tokens *s_ptr as $path;)
+                quote_tokens!(cx, $tokens
+                  *s_ptr as $path;
+                )
               }
               (32, _) => {
-                quote_expr!(cx, $tokens (*s_ptr as $path) << $lsft;)
+                quote_tokens!(cx, $tokens
+                  (*s_ptr as $path) << $lsft;
+                )
               }
               (_, 0) => {
-                quote_expr!(cx, $tokens (*s_ptr & $mask) as $path;)
+                quote_tokens!(cx, $tokens
+                  (*s_ptr & $mask) as $path;
+                )
               }
               (_, _) => {
-                quote_expr!(cx, $tokens ((*s_ptr & $mask) as $path) << $lsft;)
+                quote_tokens!(cx, $tokens
+                  ((*s_ptr & $mask) as $path) << $lsft;
+                )
               }
             }
           };
-          stmt.node = ast::StmtKind::Expr(expr, ast::DUMMY_NODE_ID);
-          block.stmts.push(stmt.clone());
-          tokens = quote_tokens!(cx, *o_ptr |=);
 
           o_bits -= s_bits;
           s_bits = 32;
-
-          let expr = quote_expr!(cx, s_ptr = s_ptr.offset(1););
-          stmt.node = ast::StmtKind::Expr(expr, ast::DUMMY_NODE_ID);
-          block.stmts.push(stmt.clone());
+          tokens = quote_tokens!(cx, $tokens
+            s_ptr = s_ptr.offset(1);
+            *o_ptr |=
+          );
         }
 
         // Decode any bits that remain
         let mask = !0u32 >> (32 - s_bits);
         let rsft = s_bits - o_bits;
-        let expr = {
+        tokens = {
           match (s_bits, rsft) {
             (32, 0) => {
-              quote_expr!(cx, $tokens *s_ptr as $path;)
+              quote_tokens!(cx, $tokens
+                *s_ptr as $path;
+              )
             }
             (32, _) => {
-              quote_expr!(cx, $tokens (*s_ptr >> $rsft) as $path;)
+              quote_tokens!(cx, $tokens
+                (*s_ptr >> $rsft) as $path;
+              )
             }
             (_, 0) => {
-              quote_expr!(cx, $tokens (*s_ptr & $mask) as $path;)
+              quote_tokens!(cx, $tokens
+                (*s_ptr & $mask) as $path;
+              )
             }
             (_, _) => {
-              quote_expr!(cx, $tokens ((*s_ptr & $mask) >> $rsft) as $path;)
+              quote_tokens!(cx, $tokens
+                ((*s_ptr & $mask) >> $rsft) as $path;
+              )
             }
           }
         };
-        stmt.node = ast::StmtKind::Expr(expr, ast::DUMMY_NODE_ID);
-        block.stmts.push(stmt.clone());
 
-        s_bits -= o_bits;
-        if s_bits == 0 {
-          s_bits = 32;
-
-          let expr = quote_expr!(cx, s_ptr = s_ptr.offset(1););
-          stmt.node = ast::StmtKind::Expr(expr, ast::DUMMY_NODE_ID);
-          block.stmts.push(stmt.clone());
+        if a < (*ln - 1) {
+          s_bits -= o_bits;
+          if s_bits == 0 {
+            s_bits = 32;
+            tokens = quote_tokens!(cx, $tokens
+              s_ptr = s_ptr.offset(1);
+            );
+          }
+          tokens = quote_tokens!(cx, $tokens
+            o_ptr = o_ptr.offset(1);
+          );
         }
-
-        let expr = quote_expr!(cx, o_ptr = o_ptr.offset(1););
-        stmt.node = ast::StmtKind::Expr(expr, ast::DUMMY_NODE_ID);
-        block.stmts.push(stmt.clone());
       }
-      // Remove unnecessary offsets
-      block.stmts.pop();
-      if s_bits == 32 { block.stmts.pop(); }
 
       // Function definition pushed to items
       let item = quote_item!(cx,
         unsafe fn $ident(s_ptr: *const u32, o_ptr: *mut $path) {
           let mut s_ptr = s_ptr;
           let mut o_ptr = o_ptr;
-          $block
+          $tokens
         }
       ).unwrap();
       items.push(item);
@@ -437,8 +415,8 @@ fn decode_expand(cx: &mut ExtCtxt,
     .map(|token| ast::TokenTree::Token(codemap::DUMMY_SP, token))
     .collect();
 
-  // DECODE_T_ARRAY definition pushed to items
-  let name = format!("decode_{}_array", path).to_uppercase();
+  // DECODE_T definition pushed to items
+  let name = format!("decode_{}", path).to_uppercase();
   let ident = ast::Ident::with_empty_ctxt(token::intern(&*name));
   let ln = lengths.len();
   items.push(
