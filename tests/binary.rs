@@ -14,7 +14,7 @@ extern crate rand;
 use pfor::utility::Encodable;
 use pfor::binary::Binary;
 use rand::distributions::{IndependentSample, Range};
-/*
+
 macro_rules! constant_values {
   ($(($t: ty: $value: expr, $length: expr, $name: ident))*) => ($(
     #[test]
@@ -238,7 +238,7 @@ wrong_width!{
   (u16: std::u64::MAX, 256, ww_u16_u64_MAX_256)
   (u32: std::u64::MAX, 256, ww_u32_u64_MAX_256)
 }
-*/
+
 macro_rules! increasing_values {
   ($(($t: ty: $min: expr, $max: expr, $name: ident))*) => ($(
     #[test]
@@ -258,12 +258,12 @@ macro_rules! increasing_values {
 }
 
 increasing_values!{
-  //(u8: 1, 255, iv_u8_1_255)
-  //(u16: 1, 255, iv_u16_1_255)
-  //(u32: 1, 255, iv_u32_1_255)
+  (u8: 1, 255, iv_u8_1_255)
+  (u16: 1, 255, iv_u16_1_255)
+  (u32: 1, 255, iv_u32_1_255)
   (u64: 1, 255, iv_u64_1_255)
 }
-/*
+
 macro_rules! random_values {
   ($(($t: ty: $min: expr, $max: expr, $length: expr, $name: ident))*) => ($(
     #[test]
@@ -293,4 +293,3 @@ random_values!{
   (u32: 0, std::u32::MAX, 256, rv_u32_0_MAX_256)
   (u64: 0, std::u64::MAX, 256, rv_u64_0_MAX_256)
 }
-*/
