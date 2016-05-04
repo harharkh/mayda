@@ -124,9 +124,7 @@ macro_rules! encodable_impl {
     $t: ident:
     $step: expr,
     $encode: ident,
-    $decode: ident,
-    $encode_simd: ident,
-    $decode_simd: ident))*) => ($(
+    $decode: ident))*) => ($(
     impl Encodable<$t> for Binary {
       fn encode(&mut self, input: &[$t]) {
         // Nothing to do
@@ -173,8 +171,11 @@ macro_rules! encodable_impl {
             s_ptr = s_ptr.offset(1);
 
             // Encode the block
-            pfor_codec::$encode_simd[width - 1](i_ptr, s_ptr);
-            i_ptr = i_ptr.offset(128);
+            for _ in 0..4 {
+              pfor_codec::$encode[width - 1][32 / $step - 1](i_ptr, s_ptr);
+              i_ptr = i_ptr.offset(32);
+              s_ptr = s_ptr.offset(width as isize);
+            }
             i_len -= 128;
           }
 
@@ -311,9 +312,11 @@ macro_rules! encodable_impl {
             s_ptr = s_ptr.offset(1);
 
             // Decode the block
-            pfor_codec::$decode_simd[width - 1](s_ptr, o_ptr);
-            s_ptr = s_ptr.offset(4 * width as isize);
-            o_ptr = o_ptr.offset(128);
+            for _ in 0..4 {
+              pfor_codec::$decode[width - 1][32 / $step - 1](s_ptr, o_ptr);
+              s_ptr = s_ptr.offset(width as isize);
+              o_ptr = o_ptr.offset(32);
+            }
           }
 
           // Final block, number of entries is unknown in advance
@@ -322,58 +325,54 @@ macro_rules! encodable_impl {
           let o_end = (blocks - 1) * 128 + o_len;
           s_ptr = s_ptr.offset(1);
 
-          if o_len == 128 {
-            pfor_codec::$decode_simd[width - 1](s_ptr, o_ptr);
-          } else {
-            // Decode any runs of 32 integers
-            while o_len > 31 {
-              pfor_codec::$decode[width - 1][32 / $step - 1](s_ptr, o_ptr);
-              s_ptr = s_ptr.offset(width as isize);
-              o_ptr = o_ptr.offset(32);
-              o_len -= 32;
+          // Decode any runs of 32 integers
+          while o_len > 31 {
+            pfor_codec::$decode[width - 1][32 / $step - 1](s_ptr, o_ptr);
+            s_ptr = s_ptr.offset(width as isize);
+            o_ptr = o_ptr.offset(32);
+            o_len -= 32;
+          }
+
+          // If there are still entries...
+          if o_len > 0 {
+            let mut s_bits: usize = 32;
+            let mut o_bits: usize;
+            if o_len > $step {
+              let part = o_len - o_len % $step;
+
+              pfor_codec::$decode[width - 1][part / $step - 1](s_ptr, o_ptr);
+              s_ptr = s_ptr.offset(((part * width) / 32) as isize);
+              o_ptr = o_ptr.offset(part as isize);
+              o_len -= part;
+
+              s_bits -= (part * width) % 32;
             }
-
-            // If there are still entries...
-            if o_len > 0 {
-              let mut s_bits: usize = 32;
-              let mut o_bits: usize;
-              if o_len > $step {
-                let part = o_len - o_len % $step;
-
-                pfor_codec::$decode[width - 1][part / $step - 1](s_ptr, o_ptr);
-                s_ptr = s_ptr.offset(((part * width) / 32) as isize);
-                o_ptr = o_ptr.offset(part as isize);
-                o_len -= part;
-
-                s_bits -= (part * width) % 32;
-              }
-              // Decode any remaining integers one by one
-              for _ in 0..o_len {
-                *o_ptr = 0;
-                o_bits = width;
-                // While the integer requires more bits than the current word...
-                while o_bits > s_bits {
-                  let mask = !0u32 >> (32 - s_bits);
-                  let lsft = o_bits - s_bits;
-                  *o_ptr |= ((*s_ptr & mask) as $t) << lsft;
-
-                  o_bits -= s_bits;
-                  s_bits = 32;
-                  s_ptr = s_ptr.offset(1);
-                }
-
-                // Decode any bits that remain
+            // Decode any remaining integers one by one
+            for _ in 0..o_len {
+              *o_ptr = 0;
+              o_bits = width;
+              // While the integer requires more bits than the current word...
+              while o_bits > s_bits {
                 let mask = !0u32 >> (32 - s_bits);
-                let rsft = s_bits - o_bits;
-                *o_ptr |= ((*s_ptr & mask) >> rsft) as $t;
+                let lsft = o_bits - s_bits;
+                *o_ptr |= ((*s_ptr & mask) as $t) << lsft;
 
-                s_bits -= o_bits;
-                if s_bits == 0 {
-                  s_bits = 32;
-                  s_ptr = s_ptr.offset(1);
-                }
-                o_ptr = o_ptr.offset(1);
+                o_bits -= s_bits;
+                s_bits = 32;
+                s_ptr = s_ptr.offset(1);
               }
+
+              // Decode any bits that remain
+              let mask = !0u32 >> (32 - s_bits);
+              let rsft = s_bits - o_bits;
+              *o_ptr |= ((*s_ptr & mask) >> rsft) as $t;
+
+              s_bits -= o_bits;
+              if s_bits == 0 {
+                s_bits = 32;
+                s_ptr = s_ptr.offset(1);
+              }
+              o_ptr = o_ptr.offset(1);
             }
           }
 
@@ -387,8 +386,8 @@ macro_rules! encodable_impl {
 }
 
 encodable_impl!{
-  (u8: 8, ENCODE_U8, DECODE_U8, ENCODE_SIMD_U8, DECODE_SIMD_U8) 
-  (u16: 8, ENCODE_U16, DECODE_U16, ENCODE_SIMD_U16, DECODE_SIMD_U16)
-  (u32: 8, ENCODE_U32, DECODE_U32, ENCODE_SIMD_U32, DECODE_SIMD_U32)
-  (u64: 8, ENCODE_U64, DECODE_U64, ENCODE_SIMD_U64, DECODE_SIMD_U64)
+  (u8: 8, ENCODE_U8, DECODE_U8)
+  (u16: 8, ENCODE_U16, DECODE_U16)
+  (u32: 8, ENCODE_U32, DECODE_U32)
+  (u64: 8, ENCODE_U64, DECODE_U64)
 }

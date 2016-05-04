@@ -9,4 +9,3 @@ name = "pfor"
 [dependencies]
 pfor_codec = { path = "pfor_codec", version = "0.0.1" }
 rand = "0.3"
-simd = { git = "https://github.com/huonw/simd" }
