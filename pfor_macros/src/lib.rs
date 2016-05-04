@@ -128,7 +128,6 @@
 #![allow(unused_imports)]
 
 extern crate rustc_plugin;
-extern crate simd;
 extern crate syntax;
 
 use rustc_plugin::Registry;
@@ -382,6 +381,7 @@ fn decode_expand(cx: &mut ExtCtxt,
             }
           }
         };
+
         if a < (*ln - 1) {
           s_bits -= o_bits;
           if s_bits == 0 {
@@ -534,95 +534,71 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
 
     // Function definition constructed here
     let mut i_bits: usize;
-    let mut s_bits: usize = 32;
+    let mut s_bits: usize = 64;
 
-    // Initialize the u32x4
+    // Initialize the u64x2
     let mut tokens = quote_tokens!(cx,
-      let mut lhs = simd::u32x4::splat(0);
+      let rhs = sse2::u64x2::new(
+        *i_ptr as u64,
+        *i_ptr.offset(1) as u64
+      );
+      let mut lhs =
     );
 
     // For every integer to be encoded...
-    for a in 0..32 {
+    for a in 0..64 {
       i_bits = wd;
-      // While the integer requires more bits than the current word...
-      while i_bits > s_bits {
+      // If the integer requires more bits than the current word...
+      if i_bits > s_bits {
         let rsft = i_bits - s_bits;
-        tokens = {
-          if rsft == 0 {
-            quote_tokens!(cx, $tokens
-              let rhs = simd::u32x4::new(
-                *i_ptr as u32,
-                *i_ptr.offset(1) as u32,
-                *i_ptr.offset(2) as u32,
-                *i_ptr.offset(3) as u32
-              );
-              lhs = lhs | rhs;
-            )
-          } else {
-            quote_tokens!(cx, $tokens
-              let rhs = simd::u32x4::new(
-                (*i_ptr >> $rsft) as u32,
-                (*i_ptr.offset(1) >> $rsft) as u32,
-                (*i_ptr.offset(2) >> $rsft) as u32,
-                (*i_ptr.offset(3) >> $rsft) as u32
-              );
-              lhs = lhs | rhs;
-            )
-          }
-        };
-
-        i_bits -= s_bits;
-        s_bits = 32;
-
         tokens = quote_tokens!(cx, $tokens
-          lhs.store(std::slice::from_raw_parts_mut(s_ptr, 4), 0);
-          s_ptr = s_ptr.offset(4);
-          lhs = simd::u32x4::splat(0);
+          (rhs >> $rsft);
+          lhs.store(std::slice::from_raw_parts_mut(s_ptr, 2), 0);
+          s_ptr = s_ptr.offset(2);
+          lhs =
         );
+        i_bits -= s_bits;
+        s_bits = 64;
       }
+
       // Encode any bits that remain
       let lsft = s_bits - i_bits;
       tokens = {
         if lsft == 0 {
           quote_tokens!(cx, $tokens
-            let rhs = simd::u32x4::new(
-              *i_ptr as u32,
-              *i_ptr.offset(1) as u32,
-              *i_ptr.offset(2) as u32,
-              *i_ptr.offset(3) as u32
-            );
-            lhs = lhs | rhs;
+            rhs;
           )
         } else {
           quote_tokens!(cx, $tokens
-            let rhs = simd::u32x4::new(
-              *i_ptr as u32,
-              *i_ptr.offset(1) as u32,
-              *i_ptr.offset(2) as u32,
-              *i_ptr.offset(3) as u32
-            );
-            lhs = lhs | (rhs << $lsft);
+            (rhs << $lsft);
           )
         }
       };
 
-      s_bits -= i_bits;
-      if s_bits == 0 {
-        s_bits = 32;
-        
+      if a < 63 {
         tokens = quote_tokens!(cx, $tokens
-          lhs.store(std::slice::from_raw_parts_mut(s_ptr, 4), 0);
+          i_ptr = i_ptr.offset(2);
+          let rhs = sse2::u64x2::new(
+            *i_ptr as u64,
+            *i_ptr.offset(1) as u64
+          );
         );
-        if a < 31 {
+        s_bits -= i_bits;
+        if s_bits == 0 {
           tokens = quote_tokens!(cx, $tokens
-            s_ptr = s_ptr.offset(4);
-            lhs = simd::u32x4::splat(0);
+            lhs.store(std::slice::from_raw_parts_mut(s_ptr, 2), 0);
+            s_ptr = s_ptr.offset(2);
+            lhs =
+          );
+          s_bits = 64;
+        } else {
+          tokens = quote_tokens!(cx, $tokens
+            lhs = lhs |
           );
         }
-      }
-      if a < 31 {
+      } else {
         tokens = quote_tokens!(cx, $tokens
-          i_ptr = i_ptr.offset(4);
+          lhs.store(std::slice::from_raw_parts_mut(s_ptr, 2), 0);
         );
       }
     }
@@ -631,7 +607,7 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
     let item = quote_item!(cx,
       unsafe fn $ident(i_ptr: *const $path, s_ptr: *mut u32) {
         let mut i_ptr = i_ptr;
-        let mut s_ptr = s_ptr;
+        let mut s_ptr = s_ptr as *mut u64;
         $tokens
       }
     ).unwrap();
@@ -686,127 +662,74 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
 
     // Function definition constructed here
     let mut o_bits: usize;
-    let mut s_bits: usize = 32;
+    let mut s_bits: usize = 64;
 
-    // Initialize the u32x4
+    // Initialize the u64x2
+    let mask = !0u64 >> (64 - wd);
     let mut tokens = quote_tokens!(cx,
-      let rhs = simd::u32x4::load(std::slice::from_raw_parts(s_ptr, 4), 0);
+      let mask = sse2::u64x2::splat($mask);
+      let rhs = sse2::u64x2::load(std::slice::from_raw_parts(s_ptr, 2), 0);
+      let mut lhs =
     );
 
     // For every integer to be decoded...
-    for a in 0..32 {
+    for a in 0..64 {
       o_bits = wd;
-      tokens = quote_tokens!(cx, $tokens
-        *o_ptr = 0;
-        *o_ptr.offset(1) = 0;
-        *o_ptr.offset(2) = 0;
-        *o_ptr.offset(3) = 0;
-      );
-      // While the integer requires more bits than the current word...
-      while o_bits > s_bits {
-        let mask = !0u32 >> (32 - s_bits);
+      // If the integer requires more bits than the current word...
+      if o_bits > s_bits {
         let lsft = o_bits - s_bits;
-        tokens = {
-          match (s_bits, lsft) {
-            (32, 0) => {
-              quote_tokens!(cx, $tokens
-                *o_ptr |= rhs.extract(0) as $path;
-                *o_ptr.offset(1) |= rhs.extract(1) as $path;
-                *o_ptr.offset(2) |= rhs.extract(2) as $path;
-                *o_ptr.offset(3) |= rhs.extract(3) as $path;
-              )
-            }
-            (32, _) => {
-              quote_tokens!(cx, $tokens
-                *o_ptr |= (rhs.extract(0) as $path) << $lsft;
-                *o_ptr.offset(1) |= (rhs.extract(1) as $path) << $lsft;
-                *o_ptr.offset(2) |= (rhs.extract(2) as $path) << $lsft;
-                *o_ptr.offset(3) |= (rhs.extract(3) as $path) << $lsft;
-              )
-            }
-            (_, 0) => {
-              quote_tokens!(cx, $tokens
-                let lhs = rhs & simd::u32x4::splat($mask);
-                *o_ptr |= lhs.extract(0) as $path;
-                *o_ptr.offset(1) |= lhs.extract(1) as $path;
-                *o_ptr.offset(2) |= lhs.extract(2) as $path;
-                *o_ptr.offset(3) |= lhs.extract(3) as $path;
-              )
-            }
-            (_, _) => {
-              quote_tokens!(cx, $tokens
-                let lhs = rhs & simd::u32x4::splat($mask);
-                *o_ptr |= (lhs.extract(0) as $path) << $lsft;
-                *o_ptr.offset(1) |= (lhs.extract(1) as $path) << $lsft;
-                *o_ptr.offset(2) |= (lhs.extract(2) as $path) << $lsft;
-                *o_ptr.offset(3) |= (lhs.extract(3) as $path) << $lsft;
-              )
-            }
-          }
-        };
-
-        o_bits -= s_bits;
-        s_bits = 32;
-
         tokens = quote_tokens!(cx, $tokens
-          s_ptr = s_ptr.offset(4);
-          let rhs = simd::u32x4::load(std::slice::from_raw_parts(s_ptr, 4), 0);
+          ((rhs << $lsft) & mask);
+          s_ptr = s_ptr.offset(2);
+          let rhs = sse2::u64x2::load(std::slice::from_raw_parts(s_ptr, 2), 0);
+          lhs = lhs |
         );
+        o_bits -= s_bits;
+        s_bits = 64;
       }
+
       // Decode any bits that remain
-      let mask = !0u32 >> (32 - s_bits);
       let rsft = s_bits - o_bits;
       tokens = {
-        match (s_bits, rsft) {
-          (32, 0) => {
+        if rsft == 0 {
+          if wd == 64 {
             quote_tokens!(cx, $tokens
-              *o_ptr |= rhs.extract(0) as $path;
-              *o_ptr.offset(1) |= rhs.extract(1) as $path;
-              *o_ptr.offset(2) |= rhs.extract(2) as $path;
-              *o_ptr.offset(3) |= rhs.extract(3) as $path;
+              rhs;
+            )
+          } else {
+            quote_tokens!(cx, $tokens
+              (rhs & mask);
             )
           }
-          (32, _) => {
+        } else {
+          if rsft + wd > 63 {
             quote_tokens!(cx, $tokens
-              let lhs = rhs >> $rsft;
-              *o_ptr |= lhs.extract(0) as $path;
-              *o_ptr.offset(1) |= lhs.extract(1) as $path;
-              *o_ptr.offset(2) |= lhs.extract(2) as $path;
-              *o_ptr.offset(3) |= lhs.extract(3) as $path;
+              (rhs >> $rsft);
             )
-          }
-          (_, 0) => {
+          } else {
             quote_tokens!(cx, $tokens
-              let lhs = rhs & simd::u32x4::splat($mask);
-              *o_ptr |= lhs.extract(0) as $path;
-              *o_ptr.offset(1) |= lhs.extract(1) as $path;
-              *o_ptr.offset(2) |= lhs.extract(2) as $path;
-              *o_ptr.offset(3) |= lhs.extract(3) as $path;
-            )
-          }
-          (_, _) => {
-            quote_tokens!(cx, $tokens
-              let lhs = (rhs & simd::u32x4::splat($mask)) >> $rsft;
-              *o_ptr |= lhs.extract(0) as $path;
-              *o_ptr.offset(1) |= lhs.extract(1) as $path;
-              *o_ptr.offset(2) |= lhs.extract(2) as $path;
-              *o_ptr.offset(3) |= lhs.extract(3) as $path;
+              ((rhs >> $rsft) & mask);
             )
           }
         }
       };
 
-      if a < 31 {
+      tokens = quote_tokens!(cx, $tokens
+        *o_ptr = lhs.extract(0) as $path;
+        *o_ptr.offset(1) = lhs.extract(1) as $path;
+      );
+      if a < 63 {
         s_bits -= o_bits;
         if s_bits == 0 {
-          s_bits = 32;
+          s_bits = 64;
           tokens = quote_tokens!(cx, $tokens
-            s_ptr = s_ptr.offset(4);
-            let rhs = simd::u32x4::load(std::slice::from_raw_parts(s_ptr, 4), 0);
+            s_ptr = s_ptr.offset(2);
+            let rhs = sse2::u64x2::load(std::slice::from_raw_parts(s_ptr, 2), 0);
           );
         }
         tokens = quote_tokens!(cx, $tokens
-          o_ptr = o_ptr.offset(4);
+          o_ptr = o_ptr.offset(2);
+          lhs =
         );
       }
     }
@@ -814,7 +737,7 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
     // Function definition pushed to items
     let item = quote_item!(cx,
       unsafe fn $ident(s_ptr: *const u32, o_ptr: *mut $path) {
-        let mut s_ptr = s_ptr;
+        let mut s_ptr = s_ptr as *const u64;
         let mut o_ptr = o_ptr;
         $tokens
       }

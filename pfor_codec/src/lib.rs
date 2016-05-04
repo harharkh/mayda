@@ -13,8 +13,12 @@
 #![plugin(pfor_macros)]
 
 #![allow(unused_mut)]
+#![allow(unused_parens)]
+#![allow(unused_variables)]
 
 extern crate simd;
+
+use simd::x86::sse2;
 
 encode!(u8, 8, 8);
 decode!(u8, 8, 8);

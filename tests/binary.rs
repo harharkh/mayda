@@ -4,6 +4,8 @@
 // http://opensource.org/licenses/MIT>. This file may not be copied, modified,
 // or distributed except according to those terms.
 
+#![feature(inclusive_range_syntax)]
+
 #![allow(non_snake_case)]
 
 extern crate pfor;
@@ -12,7 +14,7 @@ extern crate rand;
 use pfor::utility::Encodable;
 use pfor::binary::Binary;
 use rand::distributions::{IndependentSample, Range};
-
+/*
 macro_rules! constant_values {
   ($(($t: ty: $value: expr, $length: expr, $name: ident))*) => ($(
     #[test]
@@ -236,13 +238,13 @@ wrong_width!{
   (u16: std::u64::MAX, 256, ww_u16_u64_MAX_256)
   (u32: std::u64::MAX, 256, ww_u32_u64_MAX_256)
 }
-
-macro_rules! varied_values {
-  ($(($t: ty: $name: ident))*) => ($(
+*/
+macro_rules! increasing_values {
+  ($(($t: ty: $min: expr, $max: expr, $name: ident))*) => ($(
     #[test]
     fn $name() {
       let mut bin = Binary::new();
-      let input: Vec<$t> = vec![14, 28, 57, 28, 57, 14, 42, 85, 71];
+      let input: Vec<$t> = ($min...$max).collect();
       bin.encode(&input);
       let output = bin.decode().unwrap();
       println!("{:?}", input);
@@ -255,13 +257,13 @@ macro_rules! varied_values {
   )*)
 }
 
-varied_values!{
-  (u8: vv_u8_9)
-  (u16: vv_u16_9)
-  (u32: vv_u32_9)
-  (u64: vv_u64_9)
+increasing_values!{
+  //(u8: 1, 255, iv_u8_1_255)
+  //(u16: 1, 255, iv_u16_1_255)
+  //(u32: 1, 255, iv_u32_1_255)
+  (u64: 1, 255, iv_u64_1_255)
 }
-
+/*
 macro_rules! random_values {
   ($(($t: ty: $min: expr, $max: expr, $length: expr, $name: ident))*) => ($(
     #[test]
@@ -291,3 +293,4 @@ random_values!{
   (u32: 0, std::u32::MAX, 256, rv_u32_0_MAX_256)
   (u64: 0, std::u64::MAX, 256, rv_u64_0_MAX_256)
 }
+*/
