@@ -5,19 +5,17 @@
 // or distributed except according to those terms.
 
 //! Compiler plugin to generate basic encoding and decoding functions. The
-//! generated functions follow the convention encode_T_a_b and decode_T_a_b,
-//! where T is one of the unsigned integer types, a is the number of bits per
-//! integer, and b is the number of integers encoded.
+//! generated functions follow the convention encode_T_b and decode_T_b, where
+//! T is one of the unsigned integer types and b is the number of bits per
+//! integer. The number of integers encoded and decoded is always 32.
 //!
 //! The encode! and decode! syntax extensions take as arguments the unsigned
-//! integer type, the maximum number of bits per integer (less than or equal to
-//! the type width), and a step for the number of integers encoded (a divisor
-//! of 32). Functions are generated for numbers of bits in [1...max_bits], and
-//! for numbers of integers in multiples of the step up to 32.
+//! integer type and the type width in bits. Functions are generated for
+//! numbers of bits in the interval 1...type_width.
 //!
 //! Pointers to the generated functions are available in ENCODE_T and DECODE_T.
-//! These are public constant arrays, with the pointer for encode_T_a_b at 
-//! ENCODE_T[a - 1][b / c - 1], where c is the step.
+//! These are public constant arrays, with the pointer for encode_T_b at 
+//! ENCODE_T[b - 1].
 //! 
 //! # Safety
 //!
@@ -31,91 +29,120 @@
 //! The syntax extensions defined in this crate can be invoked as
 //!
 //! ```
-//! encode!(u64, 64, 8);
-//! decode!(u64, 64, 8);
+//! encode!(u32, 32);
+//! decode!(u32, 32);
 //! ```
 //!
-//! This is replaced by 256 functions that encode u64 integers and 256
-//! functions that decode u64 integers. For example, the functions that encode
-//! and decode the 48 least significant bits of 8 u64 integers are
+//! This is replaced by 32 functions that encode u16 integers and 32 functions
+//! that decode u16 integers. For example, the functions that encode and decode
+//! the 24 least significant bits of 32 u32 integers are
 //!
-//! ```
-//! unsafe fn encode_u64_48_8(i_ptr: *const u64, s_ptr: *mut u32) {
+//! ````
+//! unsafe fn encode_u32_24(i_ptr: *const u32, s_ptr: *mut u32) {
 //!     let mut i_ptr = i_ptr;
-//!     let mut s_ptr = s_ptr;
-//!     *s_ptr = (*i_ptr >> 16usize) as u32;
-//!     s_ptr = s_ptr.offset(1);
-//!     *s_ptr = (*i_ptr as u32) << 16usize;
+//!     let mut s_ptr = s_ptr as *mut u32;
+//!     *s_ptr = *i_ptr;
 //!     i_ptr = i_ptr.offset(1);
-//!     *s_ptr |= (*i_ptr >> 32usize) as u32;
+//!     *s_ptr |= *i_ptr << 24usize;
 //!     s_ptr = s_ptr.offset(1);
-//!     *s_ptr = *i_ptr as u32;
-//!     s_ptr = s_ptr.offset(1);
+//!     *s_ptr = *i_ptr >> 8usize;
 //!     i_ptr = i_ptr.offset(1);
-//!     *s_ptr = (*i_ptr >> 16usize) as u32;
+//!     *s_ptr |= *i_ptr << 16usize;
 //!     s_ptr = s_ptr.offset(1);
-//!     *s_ptr = (*i_ptr as u32) << 16usize;
+//!     *s_ptr = *i_ptr >> 16usize;
 //!     i_ptr = i_ptr.offset(1);
-//!     *s_ptr |= (*i_ptr >> 32usize) as u32;
-//!     s_ptr = s_ptr.offset(1);
-//!     *s_ptr = *i_ptr as u32;
-//!     s_ptr = s_ptr.offset(1);
+//!     *s_ptr |= *i_ptr << 8usize;
 //!     i_ptr = i_ptr.offset(1);
-//!     *s_ptr = (*i_ptr >> 16usize) as u32;
 //!     s_ptr = s_ptr.offset(1);
-//!     *s_ptr = (*i_ptr as u32) << 16usize;
+//!     *s_ptr = *i_ptr;
 //!     i_ptr = i_ptr.offset(1);
-//!     *s_ptr |= (*i_ptr >> 32usize) as u32;
+//!     *s_ptr |= *i_ptr << 24usize;
 //!     s_ptr = s_ptr.offset(1);
-//!     *s_ptr = *i_ptr as u32;
-//!     s_ptr = s_ptr.offset(1);
+//!     *s_ptr = *i_ptr >> 8usize;
 //!     i_ptr = i_ptr.offset(1);
-//!     *s_ptr = (*i_ptr >> 16usize) as u32;
+//!     *s_ptr |= *i_ptr << 16usize;
 //!     s_ptr = s_ptr.offset(1);
-//!     *s_ptr = (*i_ptr as u32) << 16usize;
+//!     *s_ptr = *i_ptr >> 16usize;
 //!     i_ptr = i_ptr.offset(1);
-//!     *s_ptr |= (*i_ptr >> 32usize) as u32;
+//!     *s_ptr |= *i_ptr << 8usize;
+//!     i_ptr = i_ptr.offset(1);
 //!     s_ptr = s_ptr.offset(1);
-//!     *s_ptr = *i_ptr as u32;
-//! }
-//!
-//! unsafe fn decode_u64_48_8(s_ptr: *const u32, o_ptr: *mut u64) {
-//!     let mut s_ptr = s_ptr;
-//!     let mut o_ptr = o_ptr;
-//!     *o_ptr = (*s_ptr as u64) << 16usize;
+//!     *s_ptr = *i_ptr;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= *i_ptr << 24usize;
 //!     s_ptr = s_ptr.offset(1);
-//!     *o_ptr |= (*s_ptr >> 16usize) as u64;
-//!     o_ptr = o_ptr.offset(1);
-//!     *o_ptr = ((*s_ptr & 65535u32) as u64) << 32usize;
+//!     *s_ptr = *i_ptr >> 8usize;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= *i_ptr << 16usize;
 //!     s_ptr = s_ptr.offset(1);
-//!     *o_ptr |= *s_ptr as u64;
+//!     *s_ptr = *i_ptr >> 16usize;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= *i_ptr << 8usize;
+//!     i_ptr = i_ptr.offset(1);
 //!     s_ptr = s_ptr.offset(1);
-//!     o_ptr = o_ptr.offset(1);
-//!     *o_ptr = (*s_ptr as u64) << 16usize;
+//!     *s_ptr = *i_ptr;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= *i_ptr << 24usize;
 //!     s_ptr = s_ptr.offset(1);
-//!     *o_ptr |= (*s_ptr >> 16usize) as u64;
-//!     o_ptr = o_ptr.offset(1);
-//!     *o_ptr = ((*s_ptr & 65535u32) as u64) << 32usize;
+//!     *s_ptr = *i_ptr >> 8usize;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= *i_ptr << 16usize;
 //!     s_ptr = s_ptr.offset(1);
-//!     *o_ptr |= *s_ptr as u64;
+//!     *s_ptr = *i_ptr >> 16usize;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= *i_ptr << 8usize;
+//!     i_ptr = i_ptr.offset(1);
 //!     s_ptr = s_ptr.offset(1);
-//!     o_ptr = o_ptr.offset(1);
-//!     *o_ptr = (*s_ptr as u64) << 16usize;
+//!     *s_ptr = *i_ptr;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= *i_ptr << 24usize;
 //!     s_ptr = s_ptr.offset(1);
-//!     *o_ptr |= (*s_ptr >> 16usize) as u64;
-//!     o_ptr = o_ptr.offset(1);
-//!     *o_ptr = ((*s_ptr & 65535u32) as u64) << 32usize;
+//!     *s_ptr = *i_ptr >> 8usize;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= *i_ptr << 16usize;
 //!     s_ptr = s_ptr.offset(1);
-//!     *o_ptr |= *s_ptr as u64;
+//!     *s_ptr = *i_ptr >> 16usize;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= *i_ptr << 8usize;
+//!     i_ptr = i_ptr.offset(1);
 //!     s_ptr = s_ptr.offset(1);
-//!     o_ptr = o_ptr.offset(1);
-//!     *o_ptr = (*s_ptr as u64) << 16usize;
+//!     *s_ptr = *i_ptr;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= *i_ptr << 24usize;
 //!     s_ptr = s_ptr.offset(1);
-//!     *o_ptr |= (*s_ptr >> 16usize) as u64;
-//!     o_ptr = o_ptr.offset(1);
-//!     *o_ptr = ((*s_ptr & 65535u32) as u64) << 32usize;
+//!     *s_ptr = *i_ptr >> 8usize;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= *i_ptr << 16usize;
 //!     s_ptr = s_ptr.offset(1);
-//!     *o_ptr |= *s_ptr as u64;
+//!     *s_ptr = *i_ptr >> 16usize;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= *i_ptr << 8usize;
+//!     i_ptr = i_ptr.offset(1);
+//!     s_ptr = s_ptr.offset(1);
+//!     *s_ptr = *i_ptr;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= *i_ptr << 24usize;
+//!     s_ptr = s_ptr.offset(1);
+//!     *s_ptr = *i_ptr >> 8usize;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= *i_ptr << 16usize;
+//!     s_ptr = s_ptr.offset(1);
+//!     *s_ptr = *i_ptr >> 16usize;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= *i_ptr << 8usize;
+//!     i_ptr = i_ptr.offset(1);
+//!     s_ptr = s_ptr.offset(1);
+//!     *s_ptr = *i_ptr;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= *i_ptr << 24usize;
+//!     s_ptr = s_ptr.offset(1);
+//!     *s_ptr = *i_ptr >> 8usize;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= *i_ptr << 16usize;
+//!     s_ptr = s_ptr.offset(1);
+//!     *s_ptr = *i_ptr >> 16usize;
+//!     i_ptr = i_ptr.offset(1);
+//!     *s_ptr |= *i_ptr << 8usize;
 //! }
 //! ```
 
@@ -138,118 +165,100 @@ use syntax::fold::Folder;
 use syntax::parse::token;
 use syntax::print::pprust;
 use syntax::util::small_vector;
+use std::cmp::Ordering;
 
 /// Registers the encode and decode syntax expansions.
 #[plugin_registrar]
 pub fn plugin_registrar(reg: &mut Registry) {
-  reg.register_macro("encode", encode_expand);
-  reg.register_macro("decode", decode_expand);
+  reg.register_macro("encode_native", encode_native_expand);
+  reg.register_macro("decode_native", decode_native_expand);
 }
 
-/// Generates ENCODE_T containing function pointers, with the pointer for
-/// encode_T_a_b at ENCODE_T[a - 1][b / c - 1].
-fn encode_expand(cx: &mut ExtCtxt,
-                 sp: codemap::Span,
-                 tts: &[ast::TokenTree]) -> Box<MacResult + 'static> {
+/// Generates ENCODE_NATIVE_T containing function pointers, with the pointer for
+/// encode_native_T_b at ENCODE_NATIVE_T[b - 1].
+fn encode_native_expand(cx: &mut ExtCtxt,
+                        sp: codemap::Span,
+                        tts: &[ast::TokenTree]) -> Box<MacResult + 'static> {
   // Arguments to the macro invocation
-  let (path, width, step) = {
-    match parse(cx, sp, tts) {
+  let (path, width) = {
+    match parse_native(cx, sp, tts) {
       Some(x) => x,
       None => return DummyResult::expr(sp)
     }
   };
   
-  // Number of integers encoded
-  let lengths: Vec<usize> = (1...(32 / step)).map(|a| a * step).collect();
-
   // idents: tokens used to define the ENCODE_T
   // items: definitions of the functions
   let mut idents = vec![token::OpenDelim(token::Bracket)];
   let mut items = Vec::new();
   for wd in 1...width {
-    idents.push(token::OpenDelim(token::Bracket));
-    for ln in lengths.iter() {
-      // Names for the functions directly interned
-      let name = format!("encode_{}_{}_{}", path, wd, ln);
-      let ident = ast::Ident::with_empty_ctxt(token::intern(&*name));
-      idents.push(token::Ident(ident, token::Plain));
-      idents.push(token::Comma);
+    // Names for the functions directly interned
+    let name = format!("encode_native_{}_{}", path, wd);
+    let ident = ast::Ident::with_empty_ctxt(token::intern(&*name));
+    idents.push(token::Ident(ident, token::Plain));
+    idents.push(token::Comma);
 
-      // Function definition constructed here
-      let mut i_bits: usize;
-      let mut s_bits: usize = 32;
-      let mut tokens = quote_tokens!(cx, *s_ptr =);
+    // Function definition constructed here
+    let mut s_bits: usize = width;
+    let mut tokens = quote_tokens!(cx, *s_ptr =);
 
-      // For every integer to be encoded...
-      for a in 0..*ln {
-        i_bits = wd;
-        // While the integer requires more bits than the current word...
-        while i_bits > s_bits {
-          let rsft = i_bits - s_bits;
-          tokens = {
-            if rsft == 0 {
-              quote_tokens!(cx, $tokens
-                *i_ptr as u32;
-              )
-            } else {
-              quote_tokens!(cx, $tokens
-                (*i_ptr >> $rsft) as u32;
-              )
-            }
-          };
+    // For every integer to be encoded...
+    for a in 0..64 {
+      let lsft = width - s_bits;
+      if lsft == 0 {
+        tokens = quote_tokens!(cx, $tokens
+          *i_ptr;
+        );
+      } else {
+        tokens = quote_tokens!(cx, $tokens
+          *i_ptr << $lsft;
+        );
+      }
 
-          i_bits -= s_bits;
-          s_bits = 32;
-          tokens = quote_tokens!(cx, $tokens
-            s_ptr = s_ptr.offset(1);
-            *s_ptr =
-          );
-        }
-        // Encode any bits that remain
-        let lsft = s_bits - i_bits;
-        tokens = {
-          if lsft == 0 {
-            quote_tokens!(cx, $tokens
-              *i_ptr as u32;
-            )
-          } else {
-            quote_tokens!(cx, $tokens
-              (*i_ptr as u32) << $lsft;
-            )
+      if s_bits < wd {
+        tokens = quote_tokens!(cx, $tokens
+          s_ptr = s_ptr.offset(1);
+          *s_ptr = *i_ptr >> $s_bits;
+        );
+      }
+
+      if a < 63 {
+        tokens = quote_tokens!(cx, $tokens
+          i_ptr = i_ptr.offset(1);
+        );
+        match s_bits.cmp(&wd) {
+          Ordering::Greater => {
+            tokens = quote_tokens!(cx, $tokens
+              *s_ptr |=
+            );
+            s_bits -= wd;
           }
-        };
-
-        if a < (*ln - 1) {
-          s_bits -= i_bits;
-          tokens = quote_tokens!(cx, $tokens
-            i_ptr = i_ptr.offset(1);
-          );
-          if s_bits == 0 {
-            s_bits = 32;
+          Ordering::Equal => {
             tokens = quote_tokens!(cx, $tokens
               s_ptr = s_ptr.offset(1);
               *s_ptr =
             );
-          } else {
+            s_bits = width;
+          }
+          Ordering::Less => {
             tokens = quote_tokens!(cx, $tokens
               *s_ptr |=
             );
+            s_bits = width + s_bits - wd;
           }
         }
       }
-
-      // Function definition pushed to items
-      let item = quote_item!(cx,
-        unsafe fn $ident(i_ptr: *const $path, s_ptr: *mut u32) {
-          let mut i_ptr = i_ptr;
-          let mut s_ptr = s_ptr;
-          $tokens
-        }
-      ).unwrap();
-      items.push(item);
     }
-    idents.push(token::CloseDelim(token::Bracket));
-    idents.push(token::Comma);
+
+    // Function definition pushed to items
+    let item = quote_item!(cx,
+      unsafe fn $ident(i_ptr: *const $path, s_ptr: *mut u32) {
+        let mut i_ptr = i_ptr;
+        let mut s_ptr = s_ptr as *mut $path;
+        $tokens
+      }
+    ).unwrap();
+    items.push(item);
   }
   idents.push(token::CloseDelim(token::Bracket));
 
@@ -260,12 +269,11 @@ fn encode_expand(cx: &mut ExtCtxt,
     .collect();
 
   // ENCODE_T definition pushed to items
-  let name = format!("encode_{}", path).to_uppercase();
+  let name = format!("encode_native_{}", path).to_uppercase();
   let ident = ast::Ident::with_empty_ctxt(token::intern(&*name));
-  let ln = lengths.len();
   items.push(
     quote_item!(cx,
-      pub const $ident: [[unsafe fn(*const $path, *mut u32); $ln]; $width] = $ttree;
+      pub const $ident: [unsafe fn(*const $path, *mut u32); $width] = $ttree;
     ).unwrap()
   );
   
@@ -275,137 +283,109 @@ fn encode_expand(cx: &mut ExtCtxt,
   MacEager::items(small_vector::SmallVector::many(items))
 }
 
-/// Generates DECODE_T containing function pointers, with the pointer for
-/// decode_T_a_b at DECODE_T[a - 1][b - 1].
-fn decode_expand(cx: &mut ExtCtxt,
+/// Generates DECODE_NATIVE_T containing function pointers, with the pointer
+/// for decode_native_T_b at DECODE_NATIVE_T[b - 1].
+fn decode_native_expand(cx: &mut ExtCtxt,
                  sp: codemap::Span,
                  tts: &[ast::TokenTree]) -> Box<MacResult + 'static> {
   // Arguments to the macro invocation
-  let (path, width, step) = {
-    match parse(cx, sp, tts) {
+  let (path, width) = {
+    match parse_native(cx, sp, tts) {
       Some(x) => x,
       None => return DummyResult::expr(sp)
     }
   };
-
-  // Number of integers encoded
-  let lengths: Vec<usize> = (1...(32 / step)).map(|a| a * step).collect();
 
   // idents: tokens used to define the const DECODE_T
   // items: definitions of the functions
   let mut idents = vec![token::OpenDelim(token::Bracket)];
   let mut items = Vec::new();
   for wd in 1...width {
-    idents.push(token::OpenDelim(token::Bracket));
-    for ln in lengths.iter() {
-      // Names for the functions directly interned
-      let name = format!("decode_{}_{}_{}", path, wd, ln);
-      let ident = ast::Ident::with_empty_ctxt(token::intern(&*name));
-      idents.push(token::Ident(ident, token::Plain));
-      idents.push(token::Comma);
+    // Names for the functions directly interned
+    let name = format!("decode_native_{}_{}", path, wd);
+    let ident = ast::Ident::with_empty_ctxt(token::intern(&*name));
+    idents.push(token::Ident(ident, token::Plain));
+    idents.push(token::Comma);
 
-      // Function definition constructed here
-      let mut o_bits: usize;
-      let mut s_bits: usize = 32;
-      let mut tokens: Vec<ast::TokenTree> = Vec::new();
+    // Function definition constructed here
+    let mask_sft = width - wd;
+    let mut s_bits: usize = width;
+    let mut tokens: Vec<ast::TokenTree> = Vec::new();
+    if mask_sft > 0 {
+      tokens = quote_tokens!(cx,
+        let mask: $path = !0 >> $mask_sft;
+      );
+    };
 
-      // For every integer to be decoded...
-      for a in 0..*ln {
-        o_bits = wd;
-        tokens = quote_tokens!(cx, $tokens
-          *o_ptr =
-        );
-        // While the integer requires more bits than the current word...
-        while o_bits > s_bits {
-          let mask = !0u32 >> (32 - s_bits);
-          let lsft = o_bits - s_bits;
-          tokens = {
-            match (s_bits, lsft) {
-              (32, 0) => {
-                quote_tokens!(cx, $tokens
-                  *s_ptr as $path;
-                )
-              }
-              (32, _) => {
-                quote_tokens!(cx, $tokens
-                  (*s_ptr as $path) << $lsft;
-                )
-              }
-              (_, 0) => {
-                quote_tokens!(cx, $tokens
-                  (*s_ptr & $mask) as $path;
-                )
-              }
-              (_, _) => {
-                quote_tokens!(cx, $tokens
-                  ((*s_ptr & $mask) as $path) << $lsft;
-                )
-              }
-            }
-          };
+    // For every integer to be decoded...
+    for a in 0..64 {
+      tokens = quote_tokens!(cx, $tokens
+        *o_ptr =
+      );
 
-          o_bits -= s_bits;
-          s_bits = 32;
-          tokens = quote_tokens!(cx, $tokens
-            s_ptr = s_ptr.offset(1);
-            *o_ptr |=
-          );
+      let rsft = width - s_bits;
+      tokens = match s_bits.cmp(&wd) {
+        Ordering::Greater => {
+          if rsft == 0 {
+            quote_tokens!(cx, $tokens
+              *s_ptr & mask;
+            )
+          } else {
+            quote_tokens!(cx, $tokens
+              (*s_ptr >> $rsft) & mask;
+            )
+          }
         }
-
-        // Decode any bits that remain
-        let mask = !0u32 >> (32 - s_bits);
-        let rsft = s_bits - o_bits;
-        tokens = {
-          match (s_bits, rsft) {
-            (32, 0) => {
-              quote_tokens!(cx, $tokens
-                *s_ptr as $path;
-              )
-            }
-            (32, _) => {
-              quote_tokens!(cx, $tokens
-                (*s_ptr >> $rsft) as $path;
-              )
-            }
-            (_, 0) => {
-              quote_tokens!(cx, $tokens
-                (*s_ptr & $mask) as $path;
-              )
-            }
-            (_, _) => {
-              quote_tokens!(cx, $tokens
-                ((*s_ptr & $mask) >> $rsft) as $path;
-              )
-            }
+        Ordering::Equal => {
+          if rsft == 0 {
+            quote_tokens!(cx, $tokens
+              *s_ptr;
+            )
+          } else {
+            quote_tokens!(cx, $tokens
+              *s_ptr >> $rsft;
+            )
           }
-        };
-
-        if a < (*ln - 1) {
-          s_bits -= o_bits;
-          if s_bits == 0 {
-            s_bits = 32;
+        }
+        Ordering::Less => {
+          quote_tokens!(cx, $tokens
+            *s_ptr >> $rsft;
+            s_ptr = s_ptr.offset(1);
+            *o_ptr |= (*s_ptr << $s_bits) & mask;
+          )
+        }
+      };
+      
+      if a < 63 {
+        tokens = quote_tokens!(cx, $tokens
+          o_ptr = o_ptr.offset(1);
+        );
+        match s_bits.cmp(&wd) {
+          Ordering::Greater => {
+            s_bits -= wd;
+          }
+          Ordering::Equal => {
             tokens = quote_tokens!(cx, $tokens
-              s_ptr = s_ptr.offset(1);
+              s_ptr = s_ptr.offset(1); 
             );
+            s_bits = width;
           }
-          tokens = quote_tokens!(cx, $tokens
-            o_ptr = o_ptr.offset(1);
-          );
+          Ordering::Less => {
+            s_bits = width + s_bits - wd;
+          }
         }
       }
-
-      // Function definition pushed to items
-      let item = quote_item!(cx,
-        unsafe fn $ident(s_ptr: *const u32, o_ptr: *mut $path) {
-          let mut s_ptr = s_ptr;
-          let mut o_ptr = o_ptr;
-          $tokens
-        }
-      ).unwrap();
-      items.push(item);
     }
-    idents.push(token::CloseDelim(token::Bracket));
-    idents.push(token::Comma);
+
+    // Function definition pushed to items
+    let item = quote_item!(cx,
+      unsafe fn $ident(s_ptr: *const u32, o_ptr: *mut $path) {
+        let mut s_ptr = s_ptr as *const $path;
+        let mut o_ptr = o_ptr;
+        $tokens
+      }
+    ).unwrap();
+    items.push(item);
   }
   idents.push(token::CloseDelim(token::Bracket));
 
@@ -416,12 +396,11 @@ fn decode_expand(cx: &mut ExtCtxt,
     .collect();
 
   // DECODE_T definition pushed to items
-  let name = format!("decode_{}", path).to_uppercase();
+  let name = format!("decode_native_{}", path).to_uppercase();
   let ident = ast::Ident::with_empty_ctxt(token::intern(&*name));
-  let ln = lengths.len();
   items.push(
     quote_item!(cx,
-      pub const $ident: [[unsafe fn(*const u32, *mut $path); $ln]; $width] = $ttree;
+      pub const $ident: [unsafe fn(*const u32, *mut $path); $width] = $ttree;
     ).unwrap()
   );
   
@@ -431,10 +410,11 @@ fn decode_expand(cx: &mut ExtCtxt,
   MacEager::items(small_vector::SmallVector::many(items))
 }
 
-/// Parse the three arguments to the encode and decode syntax extensions.
-fn parse(cx: &mut ExtCtxt,
+/// Parse the two arguments to the encode_native and decode_native syntax
+/// extensions.
+fn parse_native(cx: &mut ExtCtxt,
          sp: codemap::Span,
-         tts: &[ast::TokenTree]) -> Option<(ast::Path, usize, usize)> {
+         tts: &[ast::TokenTree]) -> Option<(ast::Path, usize)> {
   let mut parser = cx.new_parser_from_tts(tts);
 
   let entry = cx.expander().fold_expr(parser.parse_expr().unwrap());
@@ -474,34 +454,10 @@ fn parse(cx: &mut ExtCtxt,
   };
   parser.eat(&token::Comma);
 
-  let entry = cx.expander().fold_expr(parser.parse_expr().unwrap());
-  let step = {
-    match entry.node {
-      ast::ExprKind::Lit(ref lit) => {
-        match lit.node {
-          ast::LitKind::Int(n, _) => n,
-          _ => {
-            cx.span_err(entry.span, &format!(
-                "expected integer literal but got '{}'",
-                pprust::lit_to_string(&**lit)));
-            return None
-          }
-        }
-      }
-      _ => {
-        cx.span_err(entry.span, &format!(
-            "expected integer literal but got '{}'",
-            pprust::expr_to_string(&*entry)));
-        return None }
-    }
-  };
-  assert_eq!(32 % step, 0);
-  parser.eat(&token::Comma);
-
   if parser.token != token::Eof {
     cx.span_err(sp, "expected exactly three arguments");
     return None
   }
 
-  Some((path, width as usize, step as usize))
+  Some((path, width as usize))
 }

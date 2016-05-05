@@ -12,13 +12,11 @@
 #![feature(plugin)]
 #![plugin(pfor_macros)]
 
-#![allow(unused_mut)]
-
-encode!(u8, 8, 8);
-decode!(u8, 8, 8);
-encode!(u16, 16, 8);
-decode!(u16, 16, 8);
-encode!(u32, 32, 8);
-decode!(u32, 32, 8);
-encode!(u64, 64, 8);
-decode!(u64, 64, 8);
+encode_native!(u8, 8);
+decode_native!(u8, 8);
+encode_native!(u16, 16);
+decode_native!(u16, 16);
+encode_native!(u32, 32);
+decode_native!(u32, 32);
+encode_native!(u64, 64);
+decode_native!(u64, 64);

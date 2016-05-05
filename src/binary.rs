@@ -22,11 +22,15 @@
 //! assert_eq!(input, output);
 //! ```
 
+use std::mem;
+use std::cmp::Ordering;
+
 use pfor_codec;
 use utility::{self, Bits, Encodable};
 
-const ENTRY_MASK: u32 = 0x03f80000;
-const BLOCKS_MASK: u32 = 0x3fffffff;
+const BLOCKS_MASK: u32 = 0xfffffffc;
+const WIDTH_MASK: u32 = 0x0000003f;
+const ENTRIES_MASK: u32 = 0x00001fc0;
 
 /// The type of a binary encoded integer array.
 pub struct Binary {
@@ -120,11 +124,7 @@ impl<U: Bits> Encodable<U> for Binary {
 
 macro_rules! encodable_impl {
   // $t should be a type, but is an ident to satisfy compiler
-  ($((
-    $t: ident:
-    $step: expr,
-    $encode: ident,
-    $decode: ident))*) => ($(
+  ($(($t: ident: $encode_native: ident, $decode_native: ident))*) => ($(
     impl Encodable<$t> for Binary {
       fn encode(&mut self, input: &[$t]) {
         // Nothing to do
@@ -166,15 +166,15 @@ macro_rules! encodable_impl {
 
             // Block header
             *s_ptr = 
-              ((width - 1) as u32 ) << 26 |
-              0x03f80000;
+              ((width - 1) as u32 ) |
+              0x00001fc0;
             s_ptr = s_ptr.offset(1);
 
             // Encode the block
-            for _ in 0..4 {
-              pfor_codec::$encode[width - 1][32 / $step - 1](i_ptr, s_ptr);
-              i_ptr = i_ptr.offset(32);
-              s_ptr = s_ptr.offset(width as isize);
+            for _ in 0..2 {
+              pfor_codec::$encode_native[width - 1](i_ptr, s_ptr);
+              i_ptr = i_ptr.offset(64);
+              s_ptr = s_ptr.offset(2 * width as isize);
             }
             i_len -= 128;
           }
@@ -198,62 +198,42 @@ macro_rules! encodable_impl {
 
             // Block header
             *s_ptr = 
-              ((width - 1) as u32) << 26 |
-              ((i_len - 1) as u32) << 19;
+              ((width - 1) as u32) |
+              ((i_len - 1) as u32) << 6;
             s_ptr = s_ptr.offset(1);
 
-            // Encode any runs of 32 integers
-            while i_len > 31 {
-              pfor_codec::$encode[width - 1][32 / $step - 1](i_ptr, s_ptr);
-              i_ptr = i_ptr.offset(32);
-              s_ptr = s_ptr.offset(width as isize);
-              i_len -= 32;
+            // Encode any runs of 64 integers
+            if i_len > 63 {
+              pfor_codec::$encode_native[width - 1](i_ptr, s_ptr);
+              i_ptr = i_ptr.offset(64);
+              s_ptr = s_ptr.offset(2 * width as isize);
+              i_len -= 64;
             }
 
             // If there are still entries...
             if i_len > 0 {
               let mut i_bits: usize;
               let mut s_bits: usize = 32;
-              // Encode any runs of step integers
-              if i_len > $step {
-                let part = i_len - i_len % $step;
-
-                pfor_codec::$encode[width - 1][part / $step - 1](i_ptr, s_ptr);
-                i_ptr = i_ptr.offset(part as isize);
-                s_ptr = s_ptr.offset(((part * width) / 32) as isize);
-                i_len -= part;
-
-                s_bits -= (part * width) % 32;
-                // Finished a word, moved s_ptr to uninitialized word
-                if s_bits == 32 {
-                  *s_ptr = 0;
-                }
-              } else {
-                *s_ptr = 0;
-              }
+              *s_ptr = 0;
               // Encode any remaining integers one by one
               for _ in 0..i_len {
                 i_bits = width;
-                // While the integer requires more bits than the current word...
-                while i_bits > s_bits {
-                  let rsft = i_bits - s_bits;
-                  *s_ptr |= (*i_ptr >> rsft) as u32;
 
-                  i_bits -= s_bits;
-                  s_bits = 32;
-                  s_ptr = s_ptr.offset(1);
-                  *s_ptr = 0;
-                }
-
-                // Encode any remaining bits
-                let lsft = s_bits - i_bits;
+                let lsft = 32 - s_bits;
                 *s_ptr |= (*i_ptr as u32) << lsft;
 
-                s_bits -= i_bits;
-                if s_bits == 0 {
+                while s_bits < i_bits {
+                  i_bits -= s_bits;
+                  s_ptr = s_ptr.offset(1);
                   s_bits = 32;
+                  *s_ptr = (*i_ptr >> (width - i_bits)) as u32;
+                }
+                s_bits -= i_bits;
+
+                if s_bits == 0 {
                   s_ptr = s_ptr.offset(1);
                   *s_ptr = 0;
+                  s_bits = 32;
                 }
                 i_ptr = i_ptr.offset(1);
               }
@@ -262,15 +242,15 @@ macro_rules! encodable_impl {
 
           // Binary header
           let flag = match input_max.bits() {
-            1...8   => utility::U8_FLAG,
-            9...16  => utility::U16_FLAG,
+            1...8 => utility::U8_FLAG,
+            9...16 => utility::U16_FLAG,
             17...32 => utility::U32_FLAG,
             33...64 => utility::U64_FLAG,
             _ => unreachable!()
           };
           *storage.as_mut_ptr() =
             flag |
-            (blocks - 1) as u32;
+            (blocks as u32 - 1) << 2;
 
           // Set the length of storage AFTER everything is initialized
           storage.set_len(s_end);
@@ -296,7 +276,7 @@ macro_rules! encodable_impl {
         }
 
         // Prepare output
-        let blocks = ((self.storage[0] & BLOCKS_MASK) + 1) as usize;
+        let blocks = (((self.storage[0] & BLOCKS_MASK) >> 2) + 1) as usize;
         let mut output: Vec<$t> = Vec::with_capacity(blocks * 128);
         
         // Avoids memory initialization, bounds checking, slice construction
@@ -308,69 +288,60 @@ macro_rules! encodable_impl {
           // Block size is known for all but the final block
           for _ in 0..(blocks - 1) {
             // Find the width of the block
-            let width = ((*s_ptr >> 26) + 1) as usize;
+            let width = ((*s_ptr & WIDTH_MASK) + 1) as usize;
             s_ptr = s_ptr.offset(1);
 
             // Decode the block
-            for _ in 0..4 {
-              pfor_codec::$decode[width - 1][32 / $step - 1](s_ptr, o_ptr);
-              s_ptr = s_ptr.offset(width as isize);
-              o_ptr = o_ptr.offset(32);
+            for _ in 0..2 {
+              pfor_codec::$decode_native[width - 1](s_ptr, o_ptr);
+              s_ptr = s_ptr.offset(2 * width as isize);
+              o_ptr = o_ptr.offset(64);
             }
           }
 
           // Final block, number of entries is unknown in advance
-          let width = ((*s_ptr >> 26) + 1) as usize;
-          let mut o_len = (((*s_ptr & ENTRY_MASK) >> 19) + 1) as usize;
+          let width = ((*s_ptr & WIDTH_MASK) + 1) as usize;
+          let mut o_len = (((*s_ptr & ENTRIES_MASK) >> 6) + 1) as usize;
           let o_end = (blocks - 1) * 128 + o_len;
           s_ptr = s_ptr.offset(1);
 
-          // Decode any runs of 32 integers
-          while o_len > 31 {
-            pfor_codec::$decode[width - 1][32 / $step - 1](s_ptr, o_ptr);
-            s_ptr = s_ptr.offset(width as isize);
-            o_ptr = o_ptr.offset(32);
-            o_len -= 32;
+          // Decode any runs of 64 integers
+          while o_len > 63 {
+            pfor_codec::$decode_native[width - 1](s_ptr, o_ptr);
+            s_ptr = s_ptr.offset(2 * width as isize);
+            o_ptr = o_ptr.offset(64);
+            o_len -= 64;
           }
 
           // If there are still entries...
           if o_len > 0 {
+            let mask: $t = !0 >> (mem::size_of::<$t>() * 8 - width);
             let mut s_bits: usize = 32;
             let mut o_bits: usize;
-            if o_len > $step {
-              let part = o_len - o_len % $step;
-
-              pfor_codec::$decode[width - 1][part / $step - 1](s_ptr, o_ptr);
-              s_ptr = s_ptr.offset(((part * width) / 32) as isize);
-              o_ptr = o_ptr.offset(part as isize);
-              o_len -= part;
-
-              s_bits -= (part * width) % 32;
-            }
             // Decode any remaining integers one by one
             for _ in 0..o_len {
-              *o_ptr = 0;
               o_bits = width;
-              // While the integer requires more bits than the current word...
-              while o_bits > s_bits {
-                let mask = !0u32 >> (32 - s_bits);
-                let lsft = o_bits - s_bits;
-                *o_ptr |= ((*s_ptr & mask) as $t) << lsft;
 
-                o_bits -= s_bits;
-                s_bits = 32;
-                s_ptr = s_ptr.offset(1);
-              }
-
-              // Decode any bits that remain
-              let mask = !0u32 >> (32 - s_bits);
-              let rsft = s_bits - o_bits;
-              *o_ptr |= ((*s_ptr & mask) >> rsft) as $t;
-
-              s_bits -= o_bits;
-              if s_bits == 0 {
-                s_bits = 32;
-                s_ptr = s_ptr.offset(1);
+              let rsft = 32 - s_bits;
+              *o_ptr = ((*s_ptr >> rsft) as $t) & mask;
+              match s_bits.cmp(&o_bits) {
+                Ordering::Greater => {
+                  s_bits -= o_bits;
+                }
+                Ordering::Equal => {
+                  s_ptr = s_ptr.offset(1);
+                  s_bits = 32;
+                }
+                Ordering::Less => {
+                  while o_bits > s_bits {
+                    o_bits -= s_bits;
+                    s_ptr = s_ptr.offset(1);
+                    s_bits = 32;
+                    *o_ptr |= (*s_ptr << (width - o_bits)) as $t;
+                  }
+                  *o_ptr &= mask;
+                  s_bits -= o_bits;
+                }
               }
               o_ptr = o_ptr.offset(1);
             }
@@ -386,8 +357,8 @@ macro_rules! encodable_impl {
 }
 
 encodable_impl!{
-  (u8: 8, ENCODE_U8, DECODE_U8)
-  (u16: 8, ENCODE_U16, DECODE_U16)
-  (u32: 8, ENCODE_U32, DECODE_U32)
-  (u64: 8, ENCODE_U64, DECODE_U64)
+  (u8: ENCODE_NATIVE_U8, DECODE_NATIVE_U8)
+  (u16: ENCODE_NATIVE_U16, DECODE_NATIVE_U16)
+  (u32: ENCODE_NATIVE_U32, DECODE_NATIVE_U32)
+  (u64: ENCODE_NATIVE_U64, DECODE_NATIVE_U64)
 }

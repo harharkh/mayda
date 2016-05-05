@@ -12,11 +12,11 @@ use std::mem;
 #[doc(hidden)]
 pub const U8_FLAG: u32 = 0x00000000;
 #[doc(hidden)]
-pub const U16_FLAG: u32 = 0x40000000;
+pub const U16_FLAG: u32 = 0x00000001;
 #[doc(hidden)]
-pub const U32_FLAG: u32 = 0x80000000;
+pub const U32_FLAG: u32 = 0x00000002;
 #[doc(hidden)]
-pub const U64_FLAG: u32 = 0xc0000000;
+pub const U64_FLAG: u32 = 0x00000003;
 
 /// Indicates that the bitwise representation of the type is known to pfor.
 /// Intended to be implemented only for the primitive unsigned integer types.
