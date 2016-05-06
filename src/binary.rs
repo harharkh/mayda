@@ -124,7 +124,11 @@ impl<U: Bits> Encodable<U> for Binary {
 
 macro_rules! encodable_impl {
   // $t should be a type, but is an ident to satisfy compiler
-  ($(($t: ident: $encode_native: ident, $decode_native: ident))*) => ($(
+  ($(($t: ident:
+      $encode_native: ident,
+      $decode_native: ident,
+      $encode_simd: ident,
+      $decode_simd: ident))*) => ($(
     impl Encodable<$t> for Binary {
       fn encode(&mut self, input: &[$t]) {
         // Nothing to do
@@ -171,11 +175,8 @@ macro_rules! encodable_impl {
             s_ptr = s_ptr.offset(1);
 
             // Encode the block
-            for _ in 0..2 {
-              pfor_codec::$encode_native[width - 1](i_ptr, s_ptr);
-              i_ptr = i_ptr.offset(64);
-              s_ptr = s_ptr.offset(2 * width as isize);
-            }
+            pfor_codec::$encode_simd[width - 1](i_ptr, s_ptr);
+            i_ptr = i_ptr.offset(128);
             i_len -= 128;
           }
 
@@ -292,11 +293,9 @@ macro_rules! encodable_impl {
             s_ptr = s_ptr.offset(1);
 
             // Decode the block
-            for _ in 0..2 {
-              pfor_codec::$decode_native[width - 1](s_ptr, o_ptr);
-              s_ptr = s_ptr.offset(2 * width as isize);
-              o_ptr = o_ptr.offset(64);
-            }
+            pfor_codec::$decode_simd[width - 1](s_ptr, o_ptr);
+            s_ptr = s_ptr.offset(4 * width as isize);
+            o_ptr = o_ptr.offset(128);
           }
 
           // Final block, number of entries is unknown in advance
@@ -305,6 +304,13 @@ macro_rules! encodable_impl {
           let o_end = (blocks - 1) * 128 + o_len;
           s_ptr = s_ptr.offset(1);
 
+          if o_len == 128 {
+            pfor_codec::$decode_simd[width - 1](s_ptr, o_ptr);
+            s_ptr = s_ptr.offset(4 * width as isize);
+            o_ptr = o_ptr.offset(128);
+            o_len -= 128;
+          }
+          
           // Decode any runs of 64 integers
           while o_len > 63 {
             pfor_codec::$decode_native[width - 1](s_ptr, o_ptr);
@@ -357,8 +363,8 @@ macro_rules! encodable_impl {
 }
 
 encodable_impl!{
-  (u8: ENCODE_NATIVE_U8, DECODE_NATIVE_U8)
-  (u16: ENCODE_NATIVE_U16, DECODE_NATIVE_U16)
-  (u32: ENCODE_NATIVE_U32, DECODE_NATIVE_U32)
-  (u64: ENCODE_NATIVE_U64, DECODE_NATIVE_U64)
+  (u8: ENCODE_NATIVE_U8, DECODE_NATIVE_U8, ENCODE_SIMD_U8, DECODE_SIMD_U8)
+  (u16: ENCODE_NATIVE_U16, DECODE_NATIVE_U16, ENCODE_SIMD_U16, DECODE_SIMD_U16)
+  (u32: ENCODE_NATIVE_U32, DECODE_NATIVE_U32, ENCODE_SIMD_U32, DECODE_SIMD_U32)
+  (u64: ENCODE_NATIVE_U64, DECODE_NATIVE_U64, ENCODE_SIMD_U64, DECODE_SIMD_U64)
 }

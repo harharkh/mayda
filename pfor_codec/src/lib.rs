@@ -12,6 +12,10 @@
 #![feature(plugin)]
 #![plugin(pfor_macros)]
 
+#![allow(unused_mut)]
+
+extern crate simd;
+
 encode_native!(u8, 8);
 decode_native!(u8, 8);
 encode_native!(u16, 16);
@@ -20,3 +24,12 @@ encode_native!(u32, 32);
 decode_native!(u32, 32);
 encode_native!(u64, 64);
 decode_native!(u64, 64);
+
+encode_simd!(u8, 8, simd::u8x16);
+decode_simd!(u8, 8, simd::u8x16);
+encode_simd!(u16, 16, simd::u16x8);
+decode_simd!(u16, 16, simd::u16x8);
+encode_simd!(u32, 32, simd::u32x4);
+decode_simd!(u32, 32, simd::u32x4);
+encode_simd!(u64, 64, simd::x86::sse2::u64x2);
+decode_simd!(u64, 64, simd::x86::sse2::u64x2);

@@ -162,7 +162,7 @@ use syntax::ast;
 use syntax::codemap;
 use syntax::ext::base::{DummyResult, ExtCtxt, MacResult, MacEager};
 use syntax::fold::Folder;
-use syntax::parse::token;
+use syntax::parse::{self, token};
 use syntax::print::pprust;
 use syntax::util::small_vector;
 use std::cmp::Ordering;
@@ -172,6 +172,8 @@ use std::cmp::Ordering;
 pub fn plugin_registrar(reg: &mut Registry) {
   reg.register_macro("encode_native", encode_native_expand);
   reg.register_macro("decode_native", decode_native_expand);
+  reg.register_macro("encode_simd", encode_simd_expand);
+  reg.register_macro("decode_simd", decode_simd_expand);
 }
 
 /// Generates ENCODE_NATIVE_T containing function pointers, with the pointer for
@@ -180,7 +182,7 @@ fn encode_native_expand(cx: &mut ExtCtxt,
                         sp: codemap::Span,
                         tts: &[ast::TokenTree]) -> Box<MacResult + 'static> {
   // Arguments to the macro invocation
-  let (path, width) = {
+  let (ty, width) = {
     match parse_native(cx, sp, tts) {
       Some(x) => x,
       None => return DummyResult::expr(sp)
@@ -193,8 +195,8 @@ fn encode_native_expand(cx: &mut ExtCtxt,
   let mut items = Vec::new();
   for wd in 1...width {
     // Names for the functions directly interned
-    let name = format!("encode_native_{}_{}", path, wd);
-    let ident = ast::Ident::with_empty_ctxt(token::intern(&*name));
+    let name = format!("encode_native_{}_{}", ty, wd);
+    let ident = token::str_to_ident(&*name);
     idents.push(token::Ident(ident, token::Plain));
     idents.push(token::Comma);
 
@@ -252,9 +254,9 @@ fn encode_native_expand(cx: &mut ExtCtxt,
 
     // Function definition pushed to items
     let item = quote_item!(cx,
-      unsafe fn $ident(i_ptr: *const $path, s_ptr: *mut u32) {
+      unsafe fn $ident(i_ptr: *const $ty, s_ptr: *mut u32) {
         let mut i_ptr = i_ptr;
-        let mut s_ptr = s_ptr as *mut $path;
+        let mut s_ptr = s_ptr as *mut $ty;
         $tokens
       }
     ).unwrap();
@@ -269,11 +271,11 @@ fn encode_native_expand(cx: &mut ExtCtxt,
     .collect();
 
   // ENCODE_T definition pushed to items
-  let name = format!("encode_native_{}", path).to_uppercase();
+  let name = format!("encode_native_{}", ty).to_uppercase();
   let ident = ast::Ident::with_empty_ctxt(token::intern(&*name));
   items.push(
     quote_item!(cx,
-      pub const $ident: [unsafe fn(*const $path, *mut u32); $width] = $ttree;
+      pub const $ident: [unsafe fn(*const $ty, *mut u32); $width] = $ttree;
     ).unwrap()
   );
   
@@ -286,10 +288,10 @@ fn encode_native_expand(cx: &mut ExtCtxt,
 /// Generates DECODE_NATIVE_T containing function pointers, with the pointer
 /// for decode_native_T_b at DECODE_NATIVE_T[b - 1].
 fn decode_native_expand(cx: &mut ExtCtxt,
-                 sp: codemap::Span,
-                 tts: &[ast::TokenTree]) -> Box<MacResult + 'static> {
+                        sp: codemap::Span,
+                        tts: &[ast::TokenTree]) -> Box<MacResult + 'static> {
   // Arguments to the macro invocation
-  let (path, width) = {
+  let (ty, width) = {
     match parse_native(cx, sp, tts) {
       Some(x) => x,
       None => return DummyResult::expr(sp)
@@ -302,8 +304,8 @@ fn decode_native_expand(cx: &mut ExtCtxt,
   let mut items = Vec::new();
   for wd in 1...width {
     // Names for the functions directly interned
-    let name = format!("decode_native_{}_{}", path, wd);
-    let ident = ast::Ident::with_empty_ctxt(token::intern(&*name));
+    let name = format!("decode_native_{}_{}", ty, wd);
+    let ident = token::str_to_ident(&*name);
     idents.push(token::Ident(ident, token::Plain));
     idents.push(token::Comma);
 
@@ -313,9 +315,9 @@ fn decode_native_expand(cx: &mut ExtCtxt,
     let mut tokens: Vec<ast::TokenTree> = Vec::new();
     if mask_sft > 0 {
       tokens = quote_tokens!(cx,
-        let mask: $path = !0 >> $mask_sft;
+        let mask: $ty = !0 >> $mask_sft;
       );
-    };
+    }
 
     // For every integer to be decoded...
     for a in 0..64 {
@@ -379,8 +381,8 @@ fn decode_native_expand(cx: &mut ExtCtxt,
 
     // Function definition pushed to items
     let item = quote_item!(cx,
-      unsafe fn $ident(s_ptr: *const u32, o_ptr: *mut $path) {
-        let mut s_ptr = s_ptr as *const $path;
+      unsafe fn $ident(s_ptr: *const u32, o_ptr: *mut $ty) {
+        let mut s_ptr = s_ptr as *const $ty;
         let mut o_ptr = o_ptr;
         $tokens
       }
@@ -396,11 +398,314 @@ fn decode_native_expand(cx: &mut ExtCtxt,
     .collect();
 
   // DECODE_T definition pushed to items
-  let name = format!("decode_native_{}", path).to_uppercase();
+  let name = format!("decode_native_{}", ty).to_uppercase();
   let ident = ast::Ident::with_empty_ctxt(token::intern(&*name));
   items.push(
     quote_item!(cx,
-      pub const $ident: [unsafe fn(*const u32, *mut $path); $width] = $ttree;
+      pub const $ident: [unsafe fn(*const u32, *mut $ty); $width] = $ttree;
+    ).unwrap()
+  );
+  
+  // DEBUGGING
+  // for item in &items { println!("{}", pprust::item_to_string(item)); }
+
+  MacEager::items(small_vector::SmallVector::many(items))
+}
+
+/// Generates ENCODE_SIMD_T containing function pointers, with the
+/// pointer for encode_T_a at ENCODE_SIMD_T[a - 1].
+fn encode_simd_expand(cx: &mut ExtCtxt,
+                      sp: codemap::Span,
+                      tts: &[ast::TokenTree]) -> Box<MacResult + 'static> {
+  // Arguments to the macro invocation
+  let (ty, width, simd) = {
+    match parse_simd(cx, sp, tts) {
+      Some(x) => x,
+      None => return DummyResult::expr(sp)
+    }
+  };
+  
+  let lanes = 128 / width;
+
+  // Construct code to read into register
+  let mut load = simd.clone();
+  load.segments.push(
+    ast::PathSegment {
+      identifier: token::str_to_ident("load"),
+      parameters: ast::PathParameters::none()
+    }
+  );
+  let load = quote_tokens!(cx,
+    let rhs = $load(i_slice, i_ind);
+  );
+
+  // idents: tokens used to define the ENCODE_SIMD_T
+  // items: definitions of the functions
+  let mut idents = vec![token::OpenDelim(token::Bracket)];
+  let mut items = Vec::new();
+  for wd in 1...width {
+    // Names for the functions directly interned
+    let name = format!("encode_simd_{}_{}", ty, wd);
+    let ident = token::str_to_ident(&*name);
+    idents.push(token::Ident(ident, token::Plain));
+    idents.push(token::Comma);
+
+    // Function definition constructed here
+    let s_len = wd * lanes;
+    let mut s_bits: usize = width;
+    let mut tokens = quote_tokens!(cx,
+      let i_slice =
+        std::slice::from_raw_parts(i_ptr, 128);
+      let mut s_slice =
+        std::slice::from_raw_parts_mut(s_ptr as *mut $ty, $s_len);
+      let mut i_ind = 0;
+      let mut s_ind = 0;
+      $load
+      let mut lhs =
+    );
+
+    // For every integer to be encoded...
+    for a in 0..width {
+      let lsft = width - s_bits;
+      if lsft == 0 {
+        tokens = quote_tokens!(cx, $tokens
+          rhs;
+        );
+      } else {
+        tokens = quote_tokens!(cx, $tokens
+          (rhs << $lsft);
+        );
+      }
+
+      if s_bits < wd {
+        tokens = quote_tokens!(cx, $tokens
+          lhs.store(s_slice, s_ind);
+          s_ind += $lanes;
+          lhs = rhs >> $s_bits;
+        );
+      }
+
+      if a < width - 1 {
+        tokens = quote_tokens!(cx, $tokens
+          i_ind += $lanes;
+          $load
+        );
+        match s_bits.cmp(&wd) {
+          Ordering::Greater => {
+            tokens = quote_tokens!(cx, $tokens
+              lhs = lhs |
+            );
+            s_bits -= wd;
+          }
+          Ordering::Equal => {
+            tokens = quote_tokens!(cx, $tokens
+              lhs.store(s_slice, s_ind);
+              s_ind += $lanes;
+              lhs =
+            );
+            s_bits = width;
+          }
+          Ordering::Less => {
+            tokens = quote_tokens!(cx, $tokens
+              lhs = lhs |
+            );
+            s_bits = width + s_bits - wd;
+          }
+        }
+      } else {
+        tokens = quote_tokens!(cx, $tokens
+          lhs.store(s_slice, s_ind);
+        );
+      }
+    }
+
+    // Function definition pushed to items
+    let item = quote_item!(cx,
+      unsafe fn $ident(i_ptr: *const $ty, s_ptr: *mut u32) {
+        $tokens
+      }
+    ).unwrap();
+    items.push(item);
+  }
+  idents.push(token::CloseDelim(token::Bracket));
+
+  // idents converted from tokens to TokenTree
+  let ttree: Vec<ast::TokenTree> = idents
+    .into_iter()
+    .map(|token| ast::TokenTree::Token(codemap::DUMMY_SP, token))
+    .collect();
+
+  // ENCODE_T_ARRAY definition pushed to items
+  let name = format!("encode_simd_{}", ty).to_uppercase();
+  let ident = ast::Ident::with_empty_ctxt(token::intern(&*name));
+  items.push(
+    quote_item!(cx,
+      pub const $ident: [unsafe fn(*const $ty, *mut u32); $width] = $ttree;
+    ).unwrap()
+  );
+
+  // DEBUGGING
+  // for item in &items { println!("{}", pprust::item_to_string(item)); }
+
+  MacEager::items(small_vector::SmallVector::many(items))
+}
+
+/// Generates DECODE_SIMD_T containing function pointers, with the
+/// pointer for decode_T_a_b at DECODE_SIMD_T[a - 1][b - 1].
+fn decode_simd_expand(cx: &mut ExtCtxt,
+                      sp: codemap::Span,
+                      tts: &[ast::TokenTree]) -> Box<MacResult + 'static> {
+  // Arguments to the macro invocation
+  let (ty, width, simd) = {
+    match parse_simd(cx, sp, tts) {
+      Some(x) => x,
+      None => return DummyResult::expr(sp)
+    }
+  };
+
+  let lanes = 128 / width;
+
+  // Construct code to read into register
+  let mut load = simd.clone();
+  load.segments.push(
+    ast::PathSegment {
+      identifier: token::str_to_ident("load"),
+      parameters: ast::PathParameters::none()
+    }
+  );
+  let load = quote_tokens!(cx,
+    let rhs = $load(s_slice, s_ind);
+  );
+
+  // Construct path for splat
+  let mut splat = simd.clone();
+  splat.segments.push(
+    ast::PathSegment {
+      identifier: token::str_to_ident("splat"),
+      parameters: ast::PathParameters::none()
+    }
+  );
+
+  // idents: tokens used to define the const DECODE_SIMD_T
+  // items: definitions of the functions
+  let mut idents = vec![token::OpenDelim(token::Bracket)];
+  let mut items = Vec::new();
+  for wd in 1...width {
+    // Names for the functions directly interned
+    let name = format!("decode_simd_{}_{}", ty, wd);
+    let ident = token::str_to_ident(&*name);
+    idents.push(token::Ident(ident, token::Plain));
+    idents.push(token::Comma);
+
+    // Function definition constructed here
+    let s_len = wd * lanes;
+    let mut tokens = quote_tokens!(cx,
+      let s_slice =
+        std::slice::from_raw_parts(s_ptr as *const $ty, $s_len);
+      let mut o_slice =
+        std::slice::from_raw_parts_mut(o_ptr, 128);
+      let mut s_ind = 0;
+      let mut o_ind = 0;
+      $load
+      let mut lhs;
+    );
+    let mask_sft = width - wd;
+    if mask_sft > 0 {
+      tokens = quote_tokens!(cx, $tokens
+        let mask = $splat(!0) >> $mask_sft;
+      );
+    }
+    let mut s_bits: usize = width;
+
+    // For every integer to be decoded...
+    for a in 0..width {
+      tokens = quote_tokens!(cx, $tokens
+        lhs =
+      );
+
+      let rsft = width - s_bits;
+      tokens = match s_bits.cmp(&wd) {
+        Ordering::Greater => {
+          if rsft == 0 {
+            quote_tokens!(cx, $tokens
+              rhs & mask;
+            )
+          } else {
+            quote_tokens!(cx, $tokens
+              (rhs >> $rsft) & mask;
+            )
+          }
+        }
+        Ordering::Equal => {
+          if rsft == 0 {
+            quote_tokens!(cx, $tokens
+              rhs;
+            )
+          } else {
+            quote_tokens!(cx, $tokens
+              rhs >> $rsft;
+            )
+          }
+        }
+        Ordering::Less => {
+          quote_tokens!(cx, $tokens
+            rhs >> $rsft;
+            s_ind += $lanes;
+            $load
+            lhs = lhs | (rhs << $s_bits) & mask;
+          )
+        }
+      };
+
+      if a < width - 1 {
+        tokens = quote_tokens!(cx, $tokens
+          lhs.store(o_slice, o_ind);
+          o_ind += $lanes;
+        );
+        match s_bits.cmp(&wd) {
+          Ordering::Greater => {
+            s_bits -= wd;
+          }
+          Ordering::Equal => {
+            tokens = quote_tokens!(cx, $tokens
+              s_ind += $lanes;
+              $load
+            );
+            s_bits = width;
+          }
+          Ordering::Less => {
+            s_bits = width + s_bits - wd;
+          }
+        }
+      } else {
+        tokens = quote_tokens!(cx, $tokens
+          lhs.store(o_slice, o_ind);
+        );
+      }
+    }
+
+    // Function definition pushed to items
+    let item = quote_item!(cx,
+      unsafe fn $ident(s_ptr: *const u32, o_ptr: *mut $ty) {
+        $tokens
+      }
+    ).unwrap();
+    items.push(item);
+  }
+  idents.push(token::CloseDelim(token::Bracket));
+
+  // idents converted from tokens to TokenTree
+  let ttree: Vec<ast::TokenTree> = idents
+    .into_iter()
+    .map(|token| ast::TokenTree::Token(codemap::DUMMY_SP, token))
+    .collect();
+
+  // DECODE_T definition pushed to items
+  let name = format!("decode_simd_{}", ty).to_uppercase();
+  let ident = ast::Ident::with_empty_ctxt(token::intern(&*name));
+  items.push(
+    quote_item!(cx,
+      pub const $ident: [unsafe fn(*const u32, *mut $ty); $width] = $ttree;
     ).unwrap()
   );
   
@@ -413,12 +718,12 @@ fn decode_native_expand(cx: &mut ExtCtxt,
 /// Parse the two arguments to the encode_native and decode_native syntax
 /// extensions.
 fn parse_native(cx: &mut ExtCtxt,
-         sp: codemap::Span,
-         tts: &[ast::TokenTree]) -> Option<(ast::Path, usize)> {
+                sp: codemap::Span,
+                tts: &[ast::TokenTree]) -> Option<(ast::Path, usize)> {
   let mut parser = cx.new_parser_from_tts(tts);
 
   let entry = cx.expander().fold_expr(parser.parse_expr().unwrap());
-  let path = {
+  let ty = {
     match entry.node {
       ast::ExprKind::Path(_, ref p) => p.clone(),
       _ => {
@@ -459,5 +764,71 @@ fn parse_native(cx: &mut ExtCtxt,
     return None
   }
 
-  Some((path, width as usize))
+  Some((ty, width as usize))
+}
+
+/// Parse the two arguments to the encode_native and decode_native syntax
+/// extensions.
+fn parse_simd(cx: &mut ExtCtxt,
+              sp: codemap::Span,
+              tts: &[ast::TokenTree]) -> Option<(ast::Path, usize, ast::Path)> {
+  let mut parser = cx.new_parser_from_tts(tts);
+
+  let entry = cx.expander().fold_expr(parser.parse_expr().unwrap());
+  let ty = {
+    match entry.node {
+      ast::ExprKind::Path(_, ref p) => p.clone(),
+      _ => {
+        cx.span_err(entry.span, &format!(
+          "expected type but got '{}'",
+          pprust::expr_to_string(&*entry)));
+        return None
+      }
+    }
+  };
+  parser.eat(&token::Comma);
+
+  let entry = cx.expander().fold_expr(parser.parse_expr().unwrap());
+  let width = {
+    match entry.node {
+      ast::ExprKind::Lit(ref lit) => {
+        match lit.node {
+          ast::LitKind::Int(n, _) => n,
+          _ => {
+            cx.span_err(entry.span, &format!(
+                "expected integer literal but got '{}'",
+                pprust::lit_to_string(&**lit)));
+            return None
+          }
+        }
+      }
+      _ => {
+        cx.span_err(entry.span, &format!(
+            "expected integer literal but got '{}'",
+            pprust::expr_to_string(&*entry)));
+        return None }
+    }
+  };
+  parser.eat(&token::Comma);
+
+  let entry = cx.expander().fold_expr(parser.parse_expr().unwrap());
+  let simd = {
+    match entry.node {
+      ast::ExprKind::Path(_, ref p) => p.clone(),
+      _ => {
+        cx.span_err(entry.span, &format!(
+          "expected path but got '{}'",
+          pprust::expr_to_string(&*entry)));
+        return None
+      }
+    }
+  };
+
+  parser.eat(&token::Comma);
+  if parser.token != token::Eof {
+    cx.span_err(sp, "expected exactly three arguments");
+    return None
+  }
+
+  Some((ty, width as usize, simd))
 }

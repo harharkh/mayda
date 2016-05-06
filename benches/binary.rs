@@ -38,7 +38,7 @@ encode_bench!{
   (u8: std::u8::MAX, 65536, en_u8_MAX_65536)
   (u16: std::u16::MAX, 65536, en_u16_MAX_65536)
   (u32: std::u32::MAX, 65536, en_u32_MAX_65536)
-  (u64: std::u64::MAX, 65536, en_u64_MAX_65536)
+  (u64: std::u64::MAX, 32768, en_u64_MAX_32768)
 }
 
 macro_rules! decode_bench {
@@ -65,7 +65,7 @@ decode_bench!{
   (u8: std::u8::MAX, 65536, de_u8_MAX_65536)
   (u16: std::u16::MAX, 65536, de_u16_MAX_65536)
   (u32: std::u32::MAX, 65536, de_u32_MAX_65536)
-  (u64: std::u64::MAX, 65536, de_u64_MAX_65536)
+  (u64: std::u64::MAX, 32768, de_u64_MAX_32768)
 }
 
 macro_rules! vector_bench {
