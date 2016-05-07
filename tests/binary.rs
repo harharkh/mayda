@@ -21,7 +21,7 @@ macro_rules! constant_values {
     fn $name() {
       let mut bin = Binary::new();
       let input: Vec<$t> = vec![$value; $length];
-      bin.encode(&input);
+      bin.encode(&input).unwrap();
       let output = bin.decode().unwrap();
       println!("{:?}", input);
       for a in bin.storage() {
@@ -214,38 +214,13 @@ constant_values!{
   (u64: std::u64::MAX, 256, cv_u64_MAX_256)
 }
 
-macro_rules! wrong_width {
-  ($(($t: ty: $value: expr, $length: expr, $name: ident))*) => ($(
-    #[test]
-    #[should_panic]
-    fn $name() {
-      let mut bin = Binary::new();
-      let input: Vec<u64> = vec![$value as u64; $length];
-      bin.encode(&input);
-      let output: Vec<$t> = bin.decode().unwrap();
-      for a in input.into_iter().zip(output.into_iter()) {
-        assert_eq!(a.0, a.1 as u64);
-      }
-    }
-  )*)
-}
-
-wrong_width!{
-  (u8: std::u16::MAX, 256, ww_u8_u16_MAX_256)
-  (u8: std::u32::MAX, 256, ww_u8_u32_MAX_256)
-  (u8: std::u64::MAX, 256, ww_u8_u64_MAX_256)
-  (u16: std::u32::MAX, 256, ww_u16_u32_MAX_256)
-  (u16: std::u64::MAX, 256, ww_u16_u64_MAX_256)
-  (u32: std::u64::MAX, 256, ww_u32_u64_MAX_256)
-}
-
 macro_rules! increasing_values {
   ($(($t: ty: $min: expr, $max: expr, $name: ident))*) => ($(
     #[test]
     fn $name() {
       let mut bin = Binary::new();
       let input: Vec<$t> = ($min...$max).collect();
-      bin.encode(&input);
+      bin.encode(&input).unwrap();
       let output = bin.decode().unwrap();
       println!("{:?}", input);
       for a in bin.storage() {
@@ -275,7 +250,7 @@ macro_rules! random_values {
       for _ in 0..$length {
         input.push(between.ind_sample(&mut rng));
       }
-      bin.encode(&input);
+      bin.encode(&input).unwrap();
       let output = bin.decode().unwrap();
       println!("{:?}", input);
       for a in bin.storage() {

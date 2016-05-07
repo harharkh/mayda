@@ -27,7 +27,7 @@ pub trait Bits {
   /// Number of bits in the standard representation.
   fn width() -> usize;
   /// Number of bits required to represent the number in binary.
-  fn bits(&self) -> u32;
+  fn bits(&self) -> usize;
 }
 
 macro_rules! bits_impl {
@@ -38,7 +38,7 @@ macro_rules! bits_impl {
       #[inline]
       fn width() -> usize { $size }
       #[inline]
-      fn bits(&self) -> u32 { $size as u32 - self.leading_zeros() }
+      fn bits(&self) -> usize { $size - self.leading_zeros() as usize }
     }
   )*)
 }
@@ -53,15 +53,13 @@ bits_impl!{
 
 /// Indicates that the type can be encoded and decoded by pfor.
 ///
-/// # Panics
-///
-/// The default implementations of encode and decode panic to indicate that
-/// there is no available specialization for the type. This should not happen
-/// unless the user implements Bits for some other type, or there is a library
-/// bug.
-pub trait Encodable<U: Bits> {
-  fn encode(&mut self, &[U]);
-  fn decode(&self) -> Result<Vec<U>, super::Error>;
+/// The default implementations of encode and decode returns an error to
+/// indicate that there is no available specialization for the type. This
+/// should not happen unless the user implements Bits for some other type, or
+/// there is a library bug.
+pub trait Encodable<B: Bits> {
+  fn encode(&mut self, &[B]) -> Result<(), super::Error>;
+  fn decode(&self) -> Result<Vec<B>, super::Error>;
 }
 
 /// Returns number of words required to store the given number of bits. A word

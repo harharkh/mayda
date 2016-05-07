@@ -22,7 +22,7 @@ macro_rules! encode_bench {
       let mut bin = Binary::new();
       let input: Vec<$t> = vec![$value; $length];
       b.iter(|| {
-        bin.encode(&input);
+        bin.encode(&input).unwrap();
       });
       let output = bin.decode().unwrap();
       assert_eq!(input, output);
@@ -31,14 +31,17 @@ macro_rules! encode_bench {
 }
 
 encode_bench!{
-  (u32: 1, 31, en_u32_1_31)
-  (u32: 1, 32, en_u32_1_32)
-  (u32: 3, 65535, en_u32_3_65535)
-  (u32: 3, 65536, en_u32_3_65536)
-  (u8: std::u8::MAX, 65536, en_u8_MAX_65536)
-  (u16: std::u16::MAX, 65536, en_u16_MAX_65536)
-  (u32: std::u32::MAX, 65536, en_u32_MAX_65536)
-  (u64: std::u64::MAX, 32768, en_u64_MAX_32768)
+  (u32: 1, 15, en_u32_1_15)
+  (u32: 1, 16, en_u32_1_16)
+  (u32: 3, 31, en_u32_3_31)
+  (u32: 3, 32, en_u32_3_32)
+  (u32: 5, 127, en_u32_5_127)
+  (u32: 5, 128, en_u32_5_128)
+  (u32: 7, 32768, en_u32_7_32768)
+  (u8: std::u8::MAX / 2, 32768, en_u8_MAX2_32768)
+  (u16: std::u16::MAX / 2, 32768, en_u16_MAX2_32768)
+  (u32: std::u32::MAX / 2, 32768, en_u32_MAX2_32768)
+  (u64: std::u64::MAX / 2, 32768, en_u64_MAX2_32768)
 }
 
 macro_rules! decode_bench {
@@ -47,7 +50,7 @@ macro_rules! decode_bench {
     fn $name(b: &mut Bencher) {
       let mut bin = Binary::new();
       let input: Vec<$t> = vec![$value; $length];
-      bin.encode(&input);
+      bin.encode(&input).unwrap();
       let mut output = Vec::new();
       b.iter(|| {
         output = bin.decode().unwrap();
@@ -58,14 +61,17 @@ macro_rules! decode_bench {
 } 
 
 decode_bench!{
-  (u32: 2, 31, de_u32_2_31)
-  (u32: 2, 32, de_u32_2_32)
-  (u32: 4, 65535, de_u32_4_65535)
-  (u32: 4, 65536, de_u32_4_65536)
-  (u8: std::u8::MAX, 65536, de_u8_MAX_65536)
-  (u16: std::u16::MAX, 65536, de_u16_MAX_65536)
-  (u32: std::u32::MAX, 65536, de_u32_MAX_65536)
-  (u64: std::u64::MAX, 32768, de_u64_MAX_32768)
+  (u32: 2, 15, de_u32_2_15)
+  (u32: 2, 16, de_u32_2_16)
+  (u32: 4, 31, de_u32_4_31)
+  (u32: 4, 32, de_u32_4_32)
+  (u32: 6, 127, de_u32_6_127)
+  (u32: 6, 128, de_u32_6_128)
+  (u32: 8, 32768, de_u32_8_32768)
+  (u8: std::u8::MAX / 2, 32768, de_u8_MAX2_32768)
+  (u16: std::u16::MAX / 2, 32768, de_u16_MAX2_32768)
+  (u32: std::u32::MAX / 2, 32768, de_u32_MAX2_32768)
+  (u64: std::u64::MAX / 2, 32768, de_u64_MAX2_32768)
 }
 
 macro_rules! vector_bench {
