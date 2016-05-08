@@ -5,6 +5,7 @@
 // or distributed except according to those terms.
 
 #![feature(specialization)]
+#![feature(iter_arith)]
 
 extern crate pfor_codec;
 

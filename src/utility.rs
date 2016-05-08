@@ -62,6 +62,16 @@ pub trait Encodable<B: Bits> {
   fn decode(&self) -> Result<Vec<B>, super::Error>;
 }
 
+/// Effectively a trait for indexing an encoded vector type.
+///
+/// The interface is less convenient interface than for Index. Index::index()
+/// returns a reference, but an encoded vector type must give ownership to the
+/// caller.
+pub trait Access<Idx> {
+  type Output;
+  fn access(&self, index: Idx) -> Self::Output;
+}
+
 /// Returns number of words required to store the given number of bits. A word
 /// is 32 bits long.
 ///

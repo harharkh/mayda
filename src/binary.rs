@@ -23,9 +23,10 @@
 //! ```
 
 use std::marker::PhantomData;
+use std::ops;
 
 use pfor_codec;
-use utility::{self, Bits, Encodable};
+use utility::{self, Bits, Encodable, Access};
 
 const WIDTH_MASK: u32 = 0x0000003f;
 const ENTRIES_MASK: u32 = 0x00001fc0;
@@ -135,69 +136,67 @@ macro_rules! encodable_impl {
           return Err(super::Error::new("exceeded internal capacity"))
         }
 
-        // One word for header, five words per block
-        let mut storage = Vec::with_capacity(
-          if blocks == 1 { 3 } else { 1 + 5 * blocks }
-        );
- 
         // Pointers avoid memory initialization, bounds checking, etc.
         let mut block_max: $ty;
         let mut i_ptr = input.as_ptr();
-        let mut i_left = input.len();
-        let mut s_ptr = storage.as_mut_ptr();
-        let mut s_len: usize = 1;
+        let mut i_left = input.len() - (blocks - 1) * 128;
         unsafe {
-          // Binary header
-          *s_ptr = (blocks as u32 - 1) << 2 | flag;
-
-          // Block size is known for all but the final block
-          while i_left > 127 {
-            // Find the width of the block
+          // Widths of all blocks should be known to construct header
+          let mut widths = Vec::with_capacity(blocks);
+          let mut lwr_bnd = 0;
+          for _ in 0..(blocks - 1) {
             block_max = 1;
-            for a in 0..128 {
+            for a in lwr_bnd..(lwr_bnd + 128) {
               block_max |= *(i_ptr.offset(a));
             }
-            let width = block_max.bits();
+            widths.push(block_max.bits());
+            lwr_bnd += 128;
+          }
+          block_max = 1;
+          for a in lwr_bnd..(input.len() as isize) {
+            block_max |= *(i_ptr.offset(a));
+          }
+          widths.push(block_max.bits());
 
-            // Can reallocate, s_ptr should be renewed
-            storage.reserve(s_len + 1 + 4 * width);
-            s_ptr = storage.as_mut_ptr().offset(s_len as isize);
-            s_len += 1 + 4 * width;
+          // Length of storage
+          let s_len: usize = 1 + blocks
+            + 4 * widths[0..(blocks - 1)].iter().sum::<usize>()
+            + utility::words_for_bits(i_left * widths[blocks - 1]);
+          let mut storage = Vec::with_capacity(s_len);
+          let mut s_ptr = storage.as_mut_ptr();
 
+          // Binary header
+          *s_ptr = (blocks as u32 - 1) << 2 | flag;
+          s_ptr = s_ptr.offset(1);
+
+          // Block size is known for all but the final block
+          for wd in widths[0..(blocks - 1)].iter() {
             // Block header
-            *s_ptr = 0x00001fc0 | (width - 1) as u32;
+            *s_ptr = 0x00001fc0 | (wd - 1) as u32;
             s_ptr = s_ptr.offset(1);
 
             // Encode the block
-            pfor_codec::$enc_simd[width - 1](i_ptr, s_ptr);
+            pfor_codec::$enc_simd[wd - 1](i_ptr, s_ptr);
             i_ptr = i_ptr.offset(128);
-            i_left -= 128;
+            s_ptr = s_ptr.offset((4 * wd) as isize);
           }
 
-          // If there are still entries...
-          if i_left > 0 {
-            // Find the width of the block
-            block_max = 1;
-            for a in 0..(i_left as isize) {
-              block_max |= *(i_ptr.offset(a));
-            }
-            let width = block_max.bits();
+          // Width of the final block
+          let wd = widths[blocks - 1];
 
-            // Can reallocate, s_ptr should be renewed
-            let words = utility::words_for_bits(i_left * width);
-            storage.reserve(s_len + 1 + words);
-            s_ptr = storage.as_mut_ptr().offset(s_len as isize);
-            s_len += 1 + words;
+          // Block header
+          *s_ptr = ((i_left - 1) as u32) << 6 | (wd - 1) as u32;
+          s_ptr = s_ptr.offset(1);
 
-            // Block header
-            *s_ptr = ((i_left - 1) as u32) << 6 | (width - 1) as u32;
-            s_ptr = s_ptr.offset(1);
-
+          // Encode any runs of 128 integers
+          if i_left == 128 {
+            pfor_codec::$enc_simd[wd - 1](i_ptr, s_ptr);
+          } else {
             // Encode any runs of 32 integers
             while i_left >= 32 {
-              pfor_codec::$enc[width - 1][32 / $step - 1](i_ptr, s_ptr);
+              pfor_codec::$enc[wd - 1][32 / $step - 1](i_ptr, s_ptr);
               i_ptr = i_ptr.offset(32);
-              s_ptr = s_ptr.offset(width as isize);
+              s_ptr = s_ptr.offset(wd as isize);
               i_left -= 32;
             }
 
@@ -208,11 +207,11 @@ macro_rules! encodable_impl {
               // Encode any runs of step integers
               if i_left >= $step {
                 let part = i_left - i_left % $step;
-                pfor_codec::$enc[width - 1][part / $step - 1](i_ptr, s_ptr);
+                pfor_codec::$enc[wd - 1][part / $step - 1](i_ptr, s_ptr);
                 i_ptr = i_ptr.offset(part as isize);
-                s_ptr = s_ptr.offset(((part * width) / 32) as isize);
+                s_ptr = s_ptr.offset(((part * wd) / 32) as isize);
                 i_left -= part;
-                s_bits -= (part * width) % 32;
+                s_bits -= (part * wd) % 32;
                 // Finished word, *s_ptr is uninitialized
                 if s_bits == 32 { *s_ptr = 0; }
               } else {
@@ -220,7 +219,7 @@ macro_rules! encodable_impl {
               }
               // Encode any remaining integers one by one
               for a in 0..i_left {
-                i_bits = width;
+                i_bits = wd;
 
                 // Encode in the available space
                 let lsft = 32 - s_bits;
@@ -230,7 +229,7 @@ macro_rules! encodable_impl {
                 while s_bits < i_bits {
                   i_bits -= s_bits;
                   s_ptr = s_ptr.offset(1);
-                  *s_ptr = (*i_ptr >> (width - i_bits)) as u32;
+                  *s_ptr = (*i_ptr >> (wd - i_bits)) as u32;
                   s_bits = 32;
                 }
                 s_bits -= i_bits;
@@ -249,8 +248,8 @@ macro_rules! encodable_impl {
 
           // Set the length of storage AFTER everything is initialized
           storage.set_len(s_len);
+          self.storage = storage.into_boxed_slice();
         }
-        self.storage = storage.into_boxed_slice();
         Ok(())
       }
 
@@ -284,6 +283,7 @@ macro_rules! encodable_impl {
           s_ptr = s_ptr.offset(1);
           let o_len = (blocks - 1) * 128 + o_left;
 
+          // Decode any runs of 128 integers
           if o_left == 128 {
             pfor_codec::$dec_simd[width - 1](s_ptr, o_ptr);
           } else {
@@ -352,3 +352,40 @@ encodable_impl!{
   (u32: 16, ENCODE_U32, DECODE_U32, ENCODE_SIMD_U32, DECODE_SIMD_U32)
   (u64: 16, ENCODE_U64, DECODE_U64, ENCODE_SIMD_U64, DECODE_SIMD_U64)
 }
+
+/*
+impl Access<usize> for Binary<u8> {
+  type Output = u8;
+  fn access(&self, index: usize) -> u8 {
+    0u8
+  }
+}
+
+impl Access<ops::Range<usize>> for Binary<u8> {
+  type Output = Vec<u8>;
+  fn access(&self, index: ops::Range<usize>) -> Vec<u8> {
+    vec![0u8]
+  }
+}
+
+impl Access<ops::RangeTo<usize>> for Binary<u8> {
+  type Output = Vec<u8>;
+  fn access(&self, index: ops::RangeTo<usize>) -> Vec<u8> {
+    self.access(0..index.end)
+  }
+}
+
+impl Access<ops::RangeFrom<usize>> for Binary<u8> {
+  type Output = Vec<u8>;
+  fn access(&self, index: ops::RangeFrom<usize>) -> Vec<u8> {
+    vec![0u8]
+  }
+}
+
+impl Access<ops::RangeFull> for Binary<u8> {
+  type Output = Vec<u8>;
+  fn access(&self, index: ops::RangeFull) -> Vec<u8> {
+    self.decode().unwrap()
+  }
+}
+*/
