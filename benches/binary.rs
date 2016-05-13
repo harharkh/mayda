@@ -5,13 +5,14 @@
 // or distributed except according to those terms.
 
 #![feature(test)]
+#![feature(inclusive_range_syntax)]
 
 #![allow(non_snake_case)]
 
 extern crate pfor;
 extern crate test;
 
-use pfor::utility::Encodable;
+use pfor::utility::{Access, Encodable};
 use pfor::binary::Binary;
 use test::Bencher;
 
@@ -74,6 +75,52 @@ decode_bench!{
   (u64: std::u64::MAX / 2, 32768, de_u64_MAX2_32768)
 }
 
+macro_rules! indexing_bench {
+  ($(($t: ty: $max: expr, $idx: expr, $name: ident))*) => ($(
+    #[bench]
+    fn $name(b: &mut Bencher) {
+      let mut bin = Binary::new();
+      let input: Vec<$t> = (0...$max).collect();
+      bin.encode(&input).unwrap();
+      let mut v: $t = 0;
+      b.iter(|| {
+        v = bin.access($idx);
+      });
+      assert_eq!(v, $idx as $t);
+    }
+  )*)
+}
+
+indexing_bench!{
+  (u8: 255, 255, idx_u8_255_255)
+  (u16: 65535, 65535, idx_u16_65535_65535)
+  (u32: 65535, 65535, idx_u32_65535_65535)
+  (u64: 65535, 65535, idx_u64_65535_65535)
+}
+
+macro_rules! range_bench {
+  ($(($t: ty: $max: expr, $idx: expr, $name: ident))*) => ($(
+    #[bench]
+    fn $name(b: &mut Bencher) {
+      let mut bin = Binary::new();
+      let input: Vec<$t> = (0...$max).collect();
+      bin.encode(&input).unwrap();
+      let mut vec: Vec<$t> = Vec::new();
+      b.iter(|| {
+        vec = bin.access($idx);
+      });
+      assert_eq!(&input[$idx], &vec[..]);
+    }
+  )*)
+}
+
+range_bench!{
+  (u8: 255, 0..10, r_u8_255_0_10)
+  (u16: 65535, 0..10, r_u16_65535_0_10)
+  (u32: 65535, 0..10, r_u32_65535_0_10)
+  (u64: 65535, 0..10, r_u64_65535_0_10)
+}
+
 macro_rules! vector_bench {
   ($(($t: ty: $value: expr, $length: expr, $name: ident))*) => ($(
     #[bench]
@@ -90,6 +137,6 @@ macro_rules! vector_bench {
 
 vector_bench!{
   (u32: 1, 32, vt_u32_1_32)
-  (u32: 3, 65536, vt_u32_3_65536)
-  (u32: std::u32::MAX, 65536, vt_u32_MAX_65536)
+  (u32: 3, 32768, vt_u32_3_32768)
+  (u32: std::u32::MAX / 2, 32768, vt_u32_MAX2_32768)
 }

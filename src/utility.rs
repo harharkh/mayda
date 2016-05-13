@@ -92,5 +92,5 @@ pub trait Access<Idx> {
 /// ```
 #[inline]
 pub fn words_for_bits(bits: usize) -> usize {
-  (bits + 31) / 32
+  (bits + 31) >> 5
 }

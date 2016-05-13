@@ -163,7 +163,7 @@ fn encode_expand(cx: &mut ExtCtxt,
       // Name for the function interned
       let name = format!("encode_{}_{}_{}", ty, wd, ln);
       let ident = token::str_to_ident(&*name);
-      idents.push(token::Ident(ident, token::Plain));
+      idents.push(token::Ident(ident));
       idents.push(token::Comma);
 
       // Function definition constructed here
@@ -280,7 +280,7 @@ fn decode_expand(cx: &mut ExtCtxt,
       // Name for the function interned
       let name = format!("decode_{}_{}_{}", ty, wd, ln);
       let ident = token::str_to_ident(&*name);
-      idents.push(token::Ident(ident, token::Plain));
+      idents.push(token::Ident(ident));
       idents.push(token::Comma);
 
       // Function definition constructed here
@@ -447,7 +447,7 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
     // Name for the function interned
     let name = format!("encode_simd_{}_{}", ty, wd);
     let ident = token::str_to_ident(&*name);
-    idents.push(token::Ident(ident, token::Plain));
+    idents.push(token::Ident(ident));
     idents.push(token::Comma);
 
     // Function definition constructed here
@@ -603,7 +603,7 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
     // Name for the function interned
     let name = format!("decode_simd_{}_{}", ty, wd);
     let ident = token::str_to_ident(&*name);
-    idents.push(token::Ident(ident, token::Plain));
+    idents.push(token::Ident(ident));
     idents.push(token::Comma);
 
     // Function definition constructed here
