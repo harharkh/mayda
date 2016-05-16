@@ -10,16 +10,21 @@
 //! # Examples
 //!
 //! ```
-//! use pfor::utility::Encodable;
+//! use pfor::utility::{Access, Encodable};
 //! use pfor::binary::Binary;
 //!
-//! let mut bin = Binary::new();
-//!
 //! let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
+//! let mut bin = Binary::new();
 //! bin.encode(&input).unwrap();
-//! let output = bin.decode().unwrap();
 //!
+//! let output = bin.decode().unwrap();
 //! assert_eq!(input, output);
+//!
+//! let value = bin.access(4);
+//! assert_eq!(value, 5);
+//!
+//! let range = bin.access(1..4);
+//! assert_eq!(range, vec![4, 2, 8]); 
 //! ```
 
 use std::marker::PhantomData;
@@ -42,6 +47,7 @@ impl<B: Bits> Binary<B> {
   ///
   /// # Examples
   /// ```
+  /// use std::mem;
   /// use pfor::binary::Binary;
   /// use pfor::utility::Encodable;
   ///
@@ -50,8 +56,8 @@ impl<B: Bits> Binary<B> {
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
   /// bin.encode(&input);
   ///
-  /// // Storage contains three u32 (two for headers, one for values)
-  /// assert_eq!(bin.storage().len(), 3);
+  /// let bytes = mem::size_of_val(&bin);
+  /// assert_eq!(bytes, 16);
   /// ```
   pub fn new() -> Self {
     Binary {
@@ -72,8 +78,8 @@ impl<B: Bits> Binary<B> {
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
   /// bin.encode(&input);
   ///
-  /// // Storage contains three u32 (two for headers, one for values)
-  /// assert_eq!(bin.storage().len(), 3);
+  /// let storage = bin.storage();
+  /// assert_eq!(storage.len(), 3);
   /// ```
   pub fn storage(&self) -> &[u32] {
     &self.storage

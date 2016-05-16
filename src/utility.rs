@@ -94,3 +94,66 @@ pub trait Access<Idx> {
 pub fn words_for_bits(bits: usize) -> usize {
   (bits + 31) >> 5
 }
+
+/// A modified version of the Floyd-Rivest algorithm with fewer comparisions
+/// and fewer swaps, specialized for the case of slices with length < 500. The
+/// modifications may not be known in the literature. This is intended to be
+/// used to find the median of a block.
+///
+/// # Examples
+///
+/// ```
+/// use pfor::utility::select_m;
+///
+/// let mut array: [u32; 7] = [1, 4, 2, 8, 5, 7, 1];
+///
+/// let min: u32 = select_m(&mut array, 0);
+/// let max: u32 = select_m(&mut array, 6);
+/// let med: u32 = select_m(&mut array, 3);
+///
+/// assert_eq!(1, min);
+/// assert_eq!(8, max);
+/// assert_eq!(4, med);
+/// ```
+pub fn select_m<T: Copy + Ord>(array: &mut [T], k: usize) -> T {
+  unsafe {
+    let k: *mut T = array.as_mut_ptr().offset(k as isize);
+    let mut l: *mut T = array.as_mut_ptr();
+    let mut r: *mut T = array.as_mut_ptr().offset(array.len() as isize - 1);
+
+    while (l as usize) < (r as usize) {
+      // Median of three
+      if *k < *l { mem::swap(&mut *l, &mut *k); }
+      if *k < *r { mem::swap(&mut *k, &mut *r); }
+      if *r < *l { mem::swap(&mut *r, &mut *l); }
+
+      // Median value is on the right
+      let t: T = *r;
+
+      let mut i: *mut T = l.offset(1);
+      let mut j: *mut T = r.offset(-1);
+      while *i < t { i = i.offset(1); }
+      while *j > t { j = j.offset(-1); }
+
+      while (i as usize) < (j as usize) {
+        mem::swap(&mut *i, &mut *j);
+        i = i.offset(1);
+        j = j.offset(-1);
+        while *i < t { i = i.offset(1); }
+        while *j > t { j = j.offset(-1); }
+      }
+
+      // Move pivot to sorted positon
+      j = j.offset(1);
+      mem::swap(&mut *j, &mut *r);
+
+      if (j as usize) <= (k as usize) {
+        l = j.offset(1);
+      }
+      if (k as usize) <= (j as usize) {
+        r = j.offset(-1);
+      }
+    }
+    *k
+  }
+}

@@ -215,7 +215,8 @@ macro_rules! random_values {
       let mut bin = Binary::new();
       let mut input: Vec<$t> = Vec::new();
       let between = Range::new($min, $max);
-      let mut rng = rand::thread_rng(); for _ in 0..$length {
+      let mut rng = rand::thread_rng();
+      for _ in 0..$length {
         input.push(between.ind_sample(&mut rng));
       }
       bin.encode(&input).unwrap();
