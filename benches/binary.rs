@@ -120,23 +120,3 @@ range_bench!{
   (u32: 65535, 0..10, r_u32_65535_0_10)
   (u64: 65535, 0..10, r_u64_65535_0_10)
 }
-
-macro_rules! vector_bench {
-  ($(($t: ty: $value: expr, $length: expr, $name: ident))*) => ($(
-    #[bench]
-    fn $name(b: &mut Bencher) {
-      let mut input: Vec<$t> = Vec::new();
-      b.iter(|| {
-        input = vec![$value; $length];
-      });
-      let output = vec![$value; $length];
-      assert_eq!(input, output);
-    }
-  )*)
-}
-
-vector_bench!{
-  (u32: 1, 32, vt_u32_1_32)
-  (u32: 3, 32768, vt_u32_3_32768)
-  (u32: std::u32::MAX / 2, 32768, vt_u32_MAX2_32768)
-}
