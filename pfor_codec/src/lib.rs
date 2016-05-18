@@ -14,20 +14,18 @@
 
 extern crate simd;
 
-encode!(u8, 8, 16);
-decode!(u8, 8, 16);
-encode!(u16, 16, 16);
-decode!(u16, 16, 16);
-encode!(u32, 32, 16);
-decode!(u32, 32, 16);
-encode!(u64, 64, 16);
-decode!(u64, 64, 16);
+macro_rules! codec {
+  ($(($ty: expr, $width: expr, $step: expr, $simd: path))*) => ($(
+    encode!($ty, $width, $step);
+    decode!($ty, $width, $step);
+    encode_simd!($ty, $width, $simd);
+    decode_simd!($ty, $width, $simd);
+  )*)
+}
 
-encode_simd!(u8, 8, simd::u8x16);
-decode_simd!(u8, 8, simd::u8x16);
-encode_simd!(u16, 16, simd::u16x8);
-decode_simd!(u16, 16, simd::u16x8);
-encode_simd!(u32, 32, simd::u32x4);
-decode_simd!(u32, 32, simd::u32x4);
-encode_simd!(u64, 64, simd::x86::sse2::u64x2);
-decode_simd!(u64, 64, simd::x86::sse2::u64x2);
+codec!{
+  (u8, 8, 16, simd::u8x16)
+  (u16, 16, 16, simd::u16x8)
+  (u32, 32, 16, simd::u32x4)
+  (u64, 64, 16, simd::x86::sse2::u64x2)
+}
