@@ -15,17 +15,22 @@
 extern crate simd;
 
 macro_rules! codec {
-  ($(($ty: expr, $width: expr, $step: expr, $simd: path))*) => ($(
-    encode!($ty, $width, $step);
-    decode!($ty, $width, $step);
-    encode_simd!($ty, $width, $simd);
-    decode_simd!($ty, $width, $simd);
+  ($(($width: expr, $step: expr, $simd: path))*) => ($(
+    encode!($width, $step);
+    decode!($width, $step);
+    encode_zz!($width, $step);
+    decode_zz!($width, $step);
+    encode_simd!($width, $simd);
+    decode_simd!($width, $simd);
+    encode_zz_simd!($width, $simd);
+    decode_zz_simd!($width, $simd);
   )*)
 }
 
+// Require CTFE for usize, width must be known for simd instructions
 codec!{
-  (u8, 8, 16, simd::u8x16)
-  (u16, 16, 16, simd::u16x8)
-  (u32, 32, 16, simd::u32x4)
-  (u64, 64, 16, simd::x86::sse2::u64x2)
+  (8, 16, simd)
+  (16, 16, simd)
+  (32, 16, simd)
+  (64, 16, simd::x86::sse2)
 }

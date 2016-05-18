@@ -119,8 +119,9 @@ impl<B: Bits> Encodable<B> for Binary<B> {
   }
 }
 
-/// The purpose of this trait is only to reduce code duplication.
-pub trait DecodeFinal<B: Bits> {
+/// The purpose of this trait is only to reduce code duplication in the decode
+/// and Access methods. Must be a trait to access type information.
+trait DecodeFinal<B: Bits> {
   unsafe fn decode_final(&self, *const u32, *mut B);
 }
 
