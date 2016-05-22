@@ -4,14 +4,14 @@
 // http://opensource.org/licenses/MIT>. This file may not be copied, modified,
 // or distributed except according to those terms.
 
-//! Defines the pfor::Error type. Currently only used for the return type of
-//! utility::decode, but intended to allow for more complex error handling in
-//! the future.
+//! Defines the `pfor::Error` type. Currently only used for the return types of
+//! functions defined in the `Encodable` trait, but intended to allow for more
+//! complex error handling in the future.
 
 use std::error;
 use std::fmt;
 
-/// The pfor::Error type.
+/// The `pfor::Error` type.
 #[derive(Debug)]
 pub struct Error {
   message: String

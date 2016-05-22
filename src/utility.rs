@@ -3,7 +3,7 @@
 // or distributed except according to those terms.
 
 //! Contains constants, enums, traits and functions used by all of the encoding
-//! types provided by the pfor crate.
+//! types provided by the `pfor` crate.
 
 use std::mem;
 
@@ -18,12 +18,10 @@ pub const U32_FLAG: u32 = 0x00000002;
 #[doc(hidden)]
 pub const U64_FLAG: u32 = 0x00000003;
 
-/// Indicates that the bitwise representation of the type is known to pfor.
-/// Intended to be implemented only for the primitive unsigned integer types.
-/// Mainly used as a bound on the Encodable trait.
+/// Indicates that the bitwise representation of the type is known to `pfor`.
+/// Intended to be implemented only for the primitive integer types. Mainly
+/// used as a bound on the `Encodable` trait.
 pub trait Bits {
-  /// Name of the type as a static string.
-  fn name() -> &'static str;
   /// Number of bits in the standard representation.
   fn width() -> usize;
   /// Number of bits required to represent the number in binary.
@@ -31,10 +29,8 @@ pub trait Bits {
 }
 
 macro_rules! bits_impl {
-  ($(($t: ty: $name: expr, $size: expr))*) => ($(
+  ($(($t: ty: $size: expr))*) => ($(
     impl Bits for $t {
-      #[inline]
-      fn name() -> &'static str { $name }
       #[inline]
       fn width() -> usize { $size }
       #[inline]
@@ -44,29 +40,41 @@ macro_rules! bits_impl {
 }
 
 bits_impl!{
-  (u8: "u8", 8)
-  (u16: "u16", 16)
-  (u32: "u32", 32)
-  (u64: "u64", 64)
-  (usize: "usize", mem::size_of::<usize>() * 8)
+  (u8: 8)
+  (u16: 16)
+  (u32: 32)
+  (u64: 64)
+  (usize: mem::size_of::<usize>() * 8)
+  (i8: 8)
+  (i16: 16)
+  (i32: 32)
+  (i64: 64)
+  (isize: mem::size_of::<isize>() * 8)
 }
 
-/// Indicates that the type can be encoded and decoded by pfor.
+/// Indicates that the type can be encoded and decoded by `pfor`.
 ///
 /// The default implementations of encode and decode returns an error to
 /// indicate that there is no available specialization for the type. This
-/// should not happen unless the user implements Bits for some other type, or
+/// should not happen unless the user implements `Bits` for some other type, or
 /// there is a library bug.
 pub trait Encodable<B: Bits> {
   fn encode(&mut self, &[B]) -> Result<(), super::Error>;
   fn decode(&self) -> Result<Vec<B>, super::Error>;
 }
 
-/// Effectively a trait for indexing an encoded vector type.
+/// A trait for indexing an encoded vector type that is similar to but less
+/// convenient than `Index`. `Index::index()` returns a reference, but an
+/// encoded vector type must give ownership to the caller.
 ///
-/// The interface is less convenient interface than for Index. Index::index()
-/// returns a reference, but an encoded vector type must give ownership to the
-/// caller.
+/// # Panics
+///
+/// All implementations panic when the index is out of bounds.
+///
+/// The default implementations of encode and decode panic to indicate that
+/// there is no available specialization for the type. This should not happen
+/// unless the user implements `Bits` for some other type, or there is a
+/// library bug.
 pub trait Access<Idx> {
   type Output;
   fn access(&self, index: Idx) -> Self::Output;
@@ -77,10 +85,9 @@ pub trait Access<Idx> {
 ///
 /// # Panics
 ///
-/// Integer overflow occurs when the value of bits is above usize::MAX - 31.
-/// This should not happen within pfor since the function is only used to find
-/// the number of words required for a block of up to 128 primitive unsigned
-/// integers.
+/// Integer overflow occurs when the value of bits is above `usize::MAX - 31`.
+/// This should not happen within `pfor` since the function is only used to
+/// find the number of words required for a block of up to 128 integers.
 ///
 /// # Examples
 ///
