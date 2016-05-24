@@ -11,6 +11,7 @@ extern crate pfor_codec;
 
 pub mod binary;
 pub mod error;
+pub mod patched;
 pub mod utility;
 
 #[doc(no_inline)]
