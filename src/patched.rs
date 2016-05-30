@@ -46,18 +46,16 @@
 //! ```
 
 use std::marker::PhantomData;
-use std::mem;
-use std::ops;
+use std::{mem, ops, ptr, usize};
 
 use pfor_codec;
 use utility::{self, Bits, Encodable, Access};
 
-const E_WIDTH: u32 = 0x0000003f;
-const E_COUNT: u32 = 0x00001fc0;
-const X_WIDTH: u32 = 0x0007e000;
-const X_COUNT: u32 = 0x03f80000;
-const I_WIDTH: u32 = 0x1c000000;
-const S_WIDTH: u32 = 0x20000000;
+const I_WIDTH: u32 = 0xe0000000;
+const X_COUNT: u32 = 0x1fc00000;
+const X_WIDTH: u32 = 0x003f8000;
+const E_COUNT: u32 = 0x00007f80;
+const E_WIDTH: u32 = 0x0000007f;
 
 /// The type of a patched encoded integer array.
 pub struct Patched<B> {
@@ -127,18 +125,19 @@ impl<B: Bits> Patched<B> {
   ///
   /// assert_eq!(bin.required_width(), 32);
   /// ```
-  pub fn required_width(&self) -> usize {
+  pub fn required_width(&self) -> u32 {
     B::width()
   }
 }
 
 /// The private interface of an Encodable type. The purpose of this trait is
-/// to reduce code duplication. The signature of _decode_final is due to a bug
-/// in the parser.
+/// to reduce code duplication. The signatures of _encode_tail and 
+/// _decode_tail are due to a bug in the parser.
 trait EncodablePrivate<B: Bits> {
   unsafe fn _encode(&[B]) -> Result<Vec<u32>, super::Error>;
   unsafe fn _decode(&[u32]) -> Result<Vec<B>, super::Error>;
-  unsafe fn _decode_final(_: *const u32, _: *mut B);
+  unsafe fn _encode_tail(_: *const B, _: *mut u32, usize, u32) -> *mut u32;
+  unsafe fn _decode_tail(_: *const u32, _: *mut B, usize, u32) -> *const u32;
 }
 
 /// Default is only for unimplemented types, should not be reachable.
@@ -151,7 +150,11 @@ impl<B> EncodablePrivate<B> for Patched<B> where B: Bits {
     Err(super::Error::new("Encodable not implemented for this type"))
   }
 
-  default unsafe fn _decode_final(_: *const u32, _: *mut B) {
+  default unsafe fn _encode_tail(_: *const B, _: *mut u32, _: usize, _: u32) -> *mut u32 {
+    panic!("Encodable not implemented for this type");
+  }
+
+  default unsafe fn _decode_tail(_: *const u32, _: *mut B, _: usize, _: u32) -> *const u32 {
     panic!("Encodable not implemented for this type");
   }
 }
@@ -181,9 +184,21 @@ macro_rules! encodable_unsigned {
       unsafe fn _encode(input: &[$ty]) -> Result<Vec<u32>, super::Error> {
         // Nothing to do
         if input.is_empty() { return Ok(Vec::new()) }
+
+        let ty_wd: u32 = $ty::width();
+        let n_blks: usize = (input.len() - 1) >> 7;
         
+        // Allow arrays of 2^37 entries (128 GB of u8)
+        let n_lvls: usize = n_blks.bits() as usize;
+        if n_lvls > 30 {
+          return Err(super::Error::new("exceeded internal capacity"))
+        }
+
+        let mut e_counts: Vec<usize> = vec![128; n_blks + 1];
+        e_counts[n_blks] = input.len() - (n_blks << 7);
+
         // Internal representation of ty
-        let flag: u32 = match $ty::width() {
+        let flag: u32 = match ty_wd {
           8 => utility::U8_FLAG,
           16 => utility::U16_FLAG,
           32 => utility::U32_FLAG,
@@ -191,101 +206,108 @@ macro_rules! encodable_unsigned {
           _ => unreachable!()
         };
 
-        // Allow arrays of 2^37 entries (128 GB of u8)
-        let n_blks: usize = (input.len() - 1) >> 7;
-        let n_lvls: usize = n_blks.bits();
-        if n_lvls > 30 {
-          return Err(super::Error::new("exceeded internal capacity"))
-        }
-
-        let mut i_left: usize = input.len() - (n_blks << 7);
+        // Quantities used throughout
         let mut scratch: Vec<$ty> = input.to_vec();
+        let mut shifts: Vec<$ty> = Vec::with_capacity(n_blks + 1);
 
-        let mut shifts: Vec<$ty> = Vec::with_capacity(n_blks);
-        let mut shift_ptr: *mut $ty = shifts.as_mut_ptr();
-        for a in 0..n_blks {
-          let slice: &myt [$ty] = &mut scratch[(a << 7)..((a + 1) << 7)];
-          *shift_ptr = utility::select_m(slice, 63);
-          shift_ptr = shift_ptr.offset(1);
+        let mut c_ptr: *mut $ty = scratch.as_mut_ptr();
+        let shift_ptr: *mut $ty = shifts.as_mut_ptr();
+
+        // Calculate shifts
+        let mut lwr: usize = 0;
+        for (a, &e_cnt) in e_counts.iter().enumerate() {
+          let slice: &mut [$ty] = &mut scratch[lwr..(lwr + e_cnt)];
+          *shift_ptr.offset(a as isize) = utility::select_m(slice, e_cnt >> 1);
+          lwr += e_cnt;
         }
-        shifts.set_len(n_blks);
-        let mut shift_ptr: *const $ty = shifts.as_ptr();
 
-        let slice: &mut [$ty] = &mut scratch[(n_blks << 7)..];
-        let tail_shift: $ty = utility::select_m(slice, i_left >> 1);
-
+        // Prepare a fresh copy of scratch and apply shifts
         scratch.copy_from_slice(input);
-        let mut scratch_ptr: *mut $ty = scratch.as_mut_ptr();
-        for _ in 0..n_blks {
-          pfor_codec::$enc_zz(scratch_ptr, 128, *shift_ptr);
-          scratch_ptr = scratch_ptr.offset(128);
-          shift_ptr = shift_ptr.offset(1);
+        for (a, &e_cnt) in e_counts.iter().enumerate() {
+          pfor_codec::$enc_zz(c_ptr, e_cnt, *shift_ptr.offset(a as isize));
+          c_ptr = c_ptr.offset(e_cnt as isize);
         }
-        pfor_codec::$enc_zz(scratch_ptr, i_left, tail_shift);
-        let mut scratch_ptr: *const $ty = scratch.as_ptr();
+        c_ptr = scratch.as_mut_ptr();
 
-        let mut widths: Vec<usize> = Vec::with_capacity(n_blks);
-        let mut width_ptr: *mut usize = widths.as_mut_ptr();
-        let mut words_1: Vec<u64> = Vec::with_capacity(n_blks);
-        let mut word_1_ptr: *mut u64 = words_1.as_mut_ptr();
-        for _ in 0..n_blks {
-          let mut bit_dist: Vec<usize> = vec![0; $ty::width()];
-          for a in 0..128 {
-            bit_dist[(*scratch_ptr.offset(a)).bits()] += 1;
+        // Quantities used for the headers
+        let mut e_widths: Vec<u32> = Vec::with_capacity(n_blks + 1);
+        let mut x_widths: Vec<u32> = Vec::with_capacity(n_blks + 1);
+        let mut i_widths: Vec<u32> = Vec::with_capacity(n_blks + 1);
+        let mut words: Vec<u64> = Vec::with_capacity(n_blks + 1);
+
+        let e_wd_ptr: *mut u32 = e_widths.as_mut_ptr();
+        let x_wd_ptr: *mut u32 = x_widths.as_mut_ptr();
+        let i_wd_ptr: *mut u32 = i_widths.as_mut_ptr();
+        let wrd_ptr: *mut u64 = words.as_mut_ptr();
+
+        // Calculate header information for the blocks
+        let mut bit_dist: Vec<u32> = Vec::with_capacity(ty_wd as usize + 1);
+        let mut e_wd_words: Vec<usize> = Vec::with_capacity(ty_wd as usize + 1);
+
+        let bit_ptr: *mut u32 = bit_dist.as_mut_ptr();
+        let eww_ptr: *mut usize = e_wd_words.as_mut_ptr();
+
+        bit_dist.set_len(ty_wd as usize + 1);
+        for (a, &e_cnt) in e_counts.iter().enumerate() {
+          // Find distribution of bits
+          ptr::write_bytes(bit_ptr, 0u8, ty_wd as usize + 1);
+          for b in 0..(e_cnt as isize) {
+            *bit_ptr.offset((*c_ptr.offset(b)).bits() as isize) += 1;
           }
-          scratch_ptr = scratch_ptr.offset(128);
-          let max_wd: usize = bit_dist.iter().rposition(|x| x != 0);
+          let max_e_wd: u32 = bit_dist.iter()
+            .rposition(|x| *x != 0)
+            .unwrap() as u32;
 
-          let mut sum: usize = bit_dist[0];
-          let mut words_for_wd: Vec<usize> = Vec::with_capacity(max_wd);
-          let mut wfw_ptr: *mut usize = words_for_wd.as_mut_ptr();
-          for wd in 1...max_n {
-            sum += bit_dist[wd];
-            let x_num = 128 - sum;
-            *wfw_ptr = 4 * wd
-              + utility::words_for_bits(sum.bits() * x_num)
-              + utility::words_for_bits((max_wd - wd) * x_num);
+          // Find e_wd and x_wd
+          let mut acc: u32 = 0;
+          for e_wd in 0...max_e_wd {
+            acc += *bit_ptr.offset(e_wd as isize);
+            let x_cnt: u32 = e_cnt as u32 - acc;
+            *eww_ptr.offset(e_wd as isize) =
+              utility::words_for_bits(e_wd * e_cnt as u32) +
+              utility::words_for_bits(acc.bits() * x_cnt) +
+              utility::words_for_bits((max_e_wd - e_wd) * x_cnt);
           }
-          words_for_wd.set_len(max_wd);
-          let (wd_1, wrds_1) = words_for_wd.iter()
-            .enumerate()
-            .fold((0, usize::MAX) |(a, b), &(c, d)|
-              if d <= b { (c, d) } else { (a, b) }
-            );
-          *width_ptr = wd_1 + 1;
-          *word_1_ptr = wrds_1;
-        }
-        widths.set_len(n_blks);
-        words_1.set_len(n_blks);
-
-        let mut bit_dist: Vec<usize> = vec![0; $ty::width()];
-        for a in 0..i_left {
-          bit_dist[(*scratch_ptr.offset(a)).bits()] += 1;
-        }
-        scratch_ptr = scratch.as_ptr();
-        let max_wd: usize = bit_dist.iter().rposition(|x| x != 0);
-
-        let mut sum: usize = bit_dist[0];
-        let mut words_for_wd: Vec<usize> = Vec::with_capacity(max_wd);
-        let mut wfw_ptr: *mut usize = words_for_wd.as_mut_ptr();
-        for wd in 1...max_n {
-          sum += bit_dist[wd];
-          let x_num = i_left - sum;
-          *wfw_ptr = utility::words_for_bits(wd * i_left)
-            + utility::words_for_bits(sum.bits() * x_num)
-            + utility::words_for_bits((max_wd - wd) * x_num);
-        }
-        words_for_wd.set_len(max_wd);
-        let (wd_1, words_1) = words_for_wd.iter()
-          .enumerate()
-          .fold((0, usize::MAX) |(a, b), &(c, d)|
-            if d <= b { (c, d) } else { (a, b) }
+          e_wd_words.set_len(max_e_wd as usize + 1);
+          let (e_wd, _) = e_wd_words.iter().enumerate().fold(
+            (0, !0),
+            |(a, b), (c, &d)| if d <= b { (c, d) } else { (a, b) }
           );
-        let tail_wd: usize = wd_1 + 1;
-        let tail_words: usize = words_1 + 1;
+          let e_wd: u32 = e_wd as u32;
+          let x_wd: u32 = max_e_wd - e_wd;
+
+          // Find i_wd and x_cnt
+          let mask: $ty = {
+            if e_wd > 0 { !0 >> (ty_wd - e_wd) } else { 0 }
+          };
+
+          let mut idx_max: usize = 0;
+          let mut prev: usize = 0;
+          let mut x_cnt: u32 = 0;
+          for b in 0..e_cnt {
+            if *c_ptr > mask {
+              idx_max |= b - prev;
+              prev = b;
+              x_cnt += 1;
+            }
+            c_ptr = c_ptr.offset(1);
+          }
+          let i_wd: u32 = idx_max.bits();
+
+          let wrd: u64 = (
+            utility::words_for_bits(e_wd * e_cnt as u32) +
+            utility::words_for_bits(i_wd * x_cnt) +
+            utility::words_for_bits(x_wd * x_cnt)) as u64;
+
+          *e_wd_ptr.offset(a as isize) = e_wd;
+          *x_wd_ptr.offset(a as isize) = x_wd;
+          *i_wd_ptr.offset(a as isize) = i_wd;
+          *wrd_ptr.offset(a as isize) = wrd as u64;
+        }
+
+        words.set_len(n_blks + 1);
 
         // Construct index header
-        let w_ptr: *mut u64 = words_1.as_ptr();
         let mut lvls: Vec<Vec<u64>> = Vec::with_capacity(n_lvls);
         for a in 0..(n_lvls as isize) {
           let length: usize = ((n_blks - (1 << a)) >> (a + 1)) + 1;
@@ -293,185 +315,109 @@ macro_rules! encodable_unsigned {
           for b in (0..(length as isize)).map(|x| x << (a + 1)) {
             let mut acc: u64 = 0;
             for c in 0..(1 << a) {
-              acc += *w_ptr.offset(b + c);
+              acc += *wrd_ptr.offset(b + c);
             }
             lvl.push(acc);
           }
           lvls.push(lvl);
         }
-        
-        // Lengths of index header and blocks
-        let base_wd: usize = ($ty::width() + 2).bits();
-        let w_words: usize = lvls.iter()
-          .enumerate()
-          .map(|(a, x)| utility::words_for_bits((base_wd + a) * x.len()))
-          .sum::<usize>();
-        let b_words: usize = 2 * n_blks +
-          + words_1.iter().sum::<u64>() as usize + 1 + tail_words;
-        let s_len: usize = 1 + w_words + b_words;
 
-        // Construct self.storage
+        // Lengths of index header and blocks
+        let base_wd: u32 = ty_wd.bits() + 2;
+        let h_words: usize = lvls.iter().enumerate()
+          .map(
+            |(a, x)|
+            utility::words_for_bits((base_wd + a as u32) * x.len() as u32))
+          .sum::<usize>();
+        let b_words: usize = 
+          (n_blks + 1) + words.iter().sum::<u64>() as usize +
+          (n_blks + 1) * utility::words_for_bits(ty_wd);
+
+        // Construct storage
+        let s_len: usize = 1 + h_words + b_words;
         let mut storage: Vec<u32> = Vec::with_capacity(s_len);
         let mut s_ptr: *mut u32 = storage.as_mut_ptr();
 
-        // Patched header
-        *s_ptr = (n_blks as u32) << 2 | flag;
+        // Write patched header
+        *s_ptr =
+          (n_blks as u32) << 2 |
+          flag;
         s_ptr = s_ptr.offset(1);
 
-        // Index header
-        let mut w_left: usize;
-        for a in 0..n_lvls {
-          let wd: usize = (base_wd + a) as usize;
-          w_left = lvls[a].len();
-          let mut l_ptr = lvls[a].as_ptr();
+        // Write index header
+        for (a, lvl) in lvls.iter().enumerate() {
+          let l_wd: u32 = base_wd + a as u32;
+          let l_blks: usize = (lvl.len() - 1) >> 7;
 
-          // Encode any runs of 128 integers 
-          for _ in 0..(w_left >> 7) {
-            pfor_codec::ENCODE_SIMD_U64[wd - 1](l_ptr, s_ptr);
+          let mut l_ptr: *const u64 = lvl.as_ptr();
+          for _ in 0..l_blks {
+            pfor_codec::ENCODE_SIMD_U64[l_wd as usize](l_ptr, s_ptr);
             l_ptr = l_ptr.offset(128);
-            s_ptr = s_ptr.offset((4 * wd) as isize);
-          }
-          w_left &= 127;
-
-          // Encode any runs of 32 integers
-          for _ in 0..(w_left >> 5) {
-            pfor_codec::ENCODE_U64[wd - 1][32 / $step - 1](l_ptr, s_ptr);
-            l_ptr = l_ptr.offset(32);
-            s_ptr = s_ptr.offset(wd as isize);
-          }
-          w_left &= 31;
-
-          // Encode any runs of $step integers
-          let mut s_bits: usize = 32;
-          if w_left >= $step {
-            let part = w_left - w_left % $step;
-            pfor_codec::ENCODE_U64[wd - 1][part / $step - 1](l_ptr, s_ptr);
-            l_ptr = l_ptr.offset(part as isize);
-            s_ptr = s_ptr.offset(((part * wd) / 32) as isize);
-            w_left -= part;
-            s_bits -= (part * wd) & 31;
+            s_ptr = s_ptr.offset(4 * l_wd as isize);
           }
 
-          // If there are still entries...
-          if w_left > 0 {
-            let mut w_bits: usize;
-            // If s_bits points to unitialized word...
-            if s_bits == 32 {
-              *s_ptr = 0;
-            }
-
-            // Encode any remaining integers one by one
-            for b in 0..w_left {
-              w_bits = wd;
-
-              // Encode in the available space
-              let lsft = 32 - s_bits;
-              *s_ptr |= (*l_ptr as u32) << lsft;
-
-              // While the available space is not enough...
-              while s_bits < w_bits {
-                w_bits -= s_bits;
-                s_ptr = s_ptr.offset(1);
-                *s_ptr = (*l_ptr >> (wd - w_bits)) as u32;
-                s_bits = 32;
-              }
-              s_bits -= w_bits;
-
-              if b < w_left - 1 {
-                l_ptr = l_ptr.offset(1);
-                if s_bits == 0 {
-                  s_ptr = s_ptr.offset(1);
-                  *s_ptr = 0;
-                  s_bits = 32;
-                }
-              }
-            }
-          }
-
-          // If a word is partially consumed...
-          if s_bits < 32 {
-            s_ptr = s_ptr.offset(1);
-          }
+          let l_left: usize = lvl.len() - (l_blks << 7);
+          s_ptr = Patched::<u64>::_encode_tail(l_ptr, s_ptr, l_left, l_wd);
         }
 
         // Block length is known for all but the final block
-        for wd_1 in widths_1.iter() {
+        let mut indices: Vec<u8> = Vec::with_capacity(127);
+        let mut exceptions: Vec<$ty> = Vec::with_capacity(127);
+
+        let mut exc_ptr: *mut $ty = exceptions.as_mut_ptr();
+        let mut idx_ptr: *mut u8 = indices.as_mut_ptr();
+
+        c_ptr = scratch.as_mut_ptr();
+        for (a, &e_cnt) in e_counts.iter().enumerate() {
+          let e_wd: u32 = *e_wd_ptr.offset(a as isize);
+          let x_wd: u32 = *x_wd_ptr.offset(a as isize);
+          let i_wd: u32 = *i_wd_ptr.offset(a as isize);
+
+          let mask: $ty = {
+            if e_wd > 0 { !0 >> (ty_wd - e_wd) } else { 0 }
+          };
+          let mut prev: isize = 0;
+          let mut x_cnt: usize = 0;
+          for b in 0..(e_cnt as isize) {
+            if *c_ptr.offset(b) > mask {
+              *idx_ptr = (b - prev) as u8;
+              idx_ptr = idx_ptr.offset(1);
+              prev = b;
+              *exc_ptr = *c_ptr.offset(b) >> e_wd;
+              exc_ptr = exc_ptr.offset(1);
+              *c_ptr.offset(b) &= mask;
+              x_cnt += 1;
+            }
+          }
+          exc_ptr = exceptions.as_mut_ptr();
+          idx_ptr = indices.as_mut_ptr();
+          
           // Block header
-          *s_ptr = 0x00001fc0 | *wd_1 as u32;
+          *s_ptr = 
+            i_wd << 29 |
+            (x_cnt as u32) << 22 |
+            x_wd << 15 |
+            (e_cnt as u32) << 7 |
+            e_wd;
           s_ptr = s_ptr.offset(1);
 
           // Encode the block
-          pfor_codec::$enc_simd[*wd_1 as usize](i_ptr, s_ptr);
-          i_ptr = i_ptr.offset(128);
-          s_ptr = s_ptr.offset((4 * (wd_1 + 1)) as isize);
-        }
+          s_ptr = Patched::<$ty>::_encode_tail(c_ptr, s_ptr, e_cnt, e_wd);
+          s_ptr = Patched::<u8>::_encode_tail(idx_ptr, s_ptr, x_cnt, i_wd);
+          s_ptr = Patched::<$ty>::_encode_tail(exc_ptr, s_ptr, x_cnt, x_wd);
+          c_ptr = c_ptr.offset(128);
 
-        // Block header
-        *s_ptr = ((i_left - 1) as u32) << 6 | (tail_wd - 1) as u32;
-        s_ptr = s_ptr.offset(1);
-
-        // Encode any runs of 128 integers
-        if i_left == 128 {
-          pfor_codec::$enc_simd[tail_wd - 1](i_ptr, s_ptr);
-        } else {
-          // Encode any runs of 32 integers
-          for _ in 0..(i_left >> 5) {
-            pfor_codec::$enc[tail_wd - 1][32 / $step - 1](i_ptr, s_ptr);
-            i_ptr = i_ptr.offset(32);
-            s_ptr = s_ptr.offset(tail_wd as isize);
-          }
-          i_left &= 31;
-
-          // Encode any runs of step integers
-          let mut s_bits: usize = 32;
-          if i_left >= $step {
-            let part = i_left - i_left % $step;
-            pfor_codec::$enc[tail_wd - 1][part / $step - 1](i_ptr, s_ptr);
-            i_ptr = i_ptr.offset(part as isize);
-            s_ptr = s_ptr.offset(((part * tail_wd) / 32) as isize);
-            i_left -= part;
-            s_bits -= (part * tail_wd) & 31;
-          }
-
-          // If there are still entries...
-          if i_left > 0 {
-            let mut i_bits: usize;
-            // If s_bits points to unitialized word...
-            if s_bits == 32 {
-              *s_ptr = 0;
-            }
-
-            // Encode any remaining integers one by one
-            for a in 0..i_left {
-              i_bits = tail_wd;
-
-              // Encode in the available space
-              let lsft = 32 - s_bits;
-              *s_ptr |= (*i_ptr as u32) << lsft;
-
-              // While the available space is not enough...
-              while s_bits < i_bits {
-                i_bits -= s_bits;
-                s_ptr = s_ptr.offset(1);
-                *s_ptr = (*i_ptr >> (tail_wd - i_bits)) as u32;
-                s_bits = 32;
-              }
-              s_bits -= i_bits;
-
-              if a < i_left - 1 {
-                i_ptr = i_ptr.offset(1);
-                if s_bits == 0 {
-                  s_ptr = s_ptr.offset(1);
-                  *s_ptr = 0;
-                  s_bits = 32;
-                }
-              }
-            }
+          if ty_wd <= 32 {
+            *s_ptr = (*shift_ptr.offset(a as isize)) as u32;
+            s_ptr = s_ptr.offset(1);
+          } else {
+            *(s_ptr as *mut $ty) = *shift_ptr.offset(a as isize);
+            s_ptr = s_ptr.offset(2);
           }
         }
+
         // Set the length of storage AFTER everything is initialized
         storage.set_len(s_len);
-
         Ok(storage)
       }
 
@@ -484,91 +430,206 @@ macro_rules! encodable_unsigned {
         let mut output: Vec<$ty> = Vec::with_capacity((n_blks + 1) << 7);
 
         // Length of index header
-        let n_lvls: usize = n_blks.bits();
-        let base_wd: usize  = ($ty::width() - 1).bits();
-        let mut w_words: usize = 0;
+        let n_lvls: u32 = n_blks.bits();
+        let base_wd: u32  = $ty::width().bits() + 2;
+        let mut h_words: usize = 0;
         for a in 0..n_lvls {
           let len: usize = ((n_blks - (1 << a)) >> (a + 1)) + 1;
-          w_words += utility::words_for_bits((base_wd + a) * len);
+          h_words += utility::words_for_bits((base_wd + a) * len as u32);
         }
 
         // Avoid memory initialization, bounds checking, etc.
         let mut s_ptr: *const u32 = storage.as_ptr();
         let mut o_ptr: *mut $ty = output.as_mut_ptr();
-        s_ptr = s_ptr.offset(1 + w_words as isize);
+        s_ptr = s_ptr.offset(1 + h_words as isize);
+
+        let mut exceptions: Vec<$ty> = Vec::with_capacity(127);
+        let mut indices: Vec<u8> = Vec::with_capacity(127);
+
+        let exp_ptr: *mut $ty = exceptions.as_mut_ptr();
+        let idx_ptr: *mut u8 = indices.as_mut_ptr();
 
         // Block size is known for all but the final block
         for _ in 0..n_blks {
           // Find the width of the block
-          let wd: usize = ((*s_ptr & WIDTH_MASK) + 1) as usize;
+          let e_wd: u32 = *s_ptr & E_WIDTH;
+          let x_wd: u32 = (*s_ptr & X_WIDTH) >> 15;
+          let x_cnt: usize = ((*s_ptr & X_COUNT) >> 22) as usize;
+          let i_wd: u32 = (*s_ptr & I_WIDTH) >> 29;
           s_ptr = s_ptr.offset(1);
 
           // Decode the block
-          pfor_codec::$dec_simd[wd - 1](s_ptr, o_ptr);
-          s_ptr = s_ptr.offset(4 * wd as isize);
+          pfor_codec::$dec_simd[e_wd as usize](s_ptr, o_ptr);
+          s_ptr = s_ptr.offset(4 * e_wd as isize);
+          s_ptr = Patched::<u8>::_decode_tail(s_ptr, idx_ptr, x_cnt, i_wd);
+          s_ptr = Patched::<$ty>::_decode_tail(s_ptr, exp_ptr, x_cnt, x_wd);
+
+          let shift: $ty = *(s_ptr as *const $ty);
+          s_ptr = s_ptr.offset(utility::words_for_bits($ty::width()) as isize);
+
+          let mut idx: u8 = 0;
+          for a in 0..(x_cnt as isize) {
+            idx += *idx_ptr.offset(a);
+            *o_ptr.offset(idx as isize) |= *exp_ptr.offset(a) << e_wd;
+          }
+          pfor_codec::$dec_zz(o_ptr, 128, shift);
+
           o_ptr = o_ptr.offset(128);
         }
 
         // Final block
-        let o_left: usize = (((*s_ptr & ENTRIES_MASK) >> 6) + 1) as usize;
-        let o_len: usize = (n_blks << 7) + o_left;
-        Patched::<$ty>::_decode_final(s_ptr, o_ptr);
+        let e_wd: u32 = *s_ptr & E_WIDTH;
+        let left: usize = ((*s_ptr & E_COUNT) >> 7) as usize;
+        let x_wd: u32 = (*s_ptr & X_WIDTH) >> 15;
+        let x_cnt: usize = ((*s_ptr & X_COUNT) >> 22) as usize;
+        let i_wd: u32 = (*s_ptr & I_WIDTH) >> 29;
+        s_ptr = s_ptr.offset(1);
+
+        s_ptr = Patched::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
+        s_ptr = Patched::<u8>::_decode_tail(s_ptr, idx_ptr, x_cnt, i_wd);
+        s_ptr = Patched::<$ty>::_decode_tail(s_ptr, exp_ptr, x_cnt, x_wd);
+        let shift: $ty = *(s_ptr as *const $ty);
+
+        let mut idx: u8 = 0;
+        for a in 0..(x_cnt as isize) {
+          idx += *idx_ptr.offset(a);
+          *o_ptr.offset(idx as isize) |= *exp_ptr.offset(a) << e_wd;
+        }
+        pfor_codec::$dec_zz(o_ptr, left, shift);
 
         // Set the length of output AFTER everything is initialized
-        output.set_len(o_len);
+        output.set_len((n_blks << 7) + left);
 
         Ok(output)
       }
 
-      unsafe fn _decode_final(s_ptr: *const u32, o_ptr: *mut $ty) {
-        let mut s_ptr = s_ptr;
-        let mut o_ptr = o_ptr;
+      unsafe fn _encode_tail(c_ptr: *const $ty,
+                             s_ptr: *mut u32,
+                             len: usize,
+                             wd: u32) -> *mut u32 {
+        let mut c_ptr: *const $ty = c_ptr;
+        let mut s_ptr: *mut u32 = s_ptr;
+        let mut len: usize = len;
 
-        let wd: usize = ((*s_ptr & WIDTH_MASK) + 1) as usize;
-        let mut left: usize = (((*s_ptr & ENTRIES_MASK) >> 6) + 1) as usize;
-        s_ptr = s_ptr.offset(1);
-
-        // Decode any runs of 128 integers
-        if left == 128 {
-          pfor_codec::$dec_simd[wd - 1](s_ptr, o_ptr);
+        // Encode any runs of 128 integers
+        if len == 128 {
+          pfor_codec::$enc_simd[wd as usize](c_ptr, s_ptr);
+          s_ptr = s_ptr.offset(4 * wd as isize);
         } else {
-          // Decode any runs of 32 integers
-          for _ in 0..(left >> 5) {
-            pfor_codec::$dec[wd - 1][32 / $step - 1](s_ptr, o_ptr);
+          // Encode any runs of 32 integers
+          for _ in 0..(len >> 5) {
+            pfor_codec::$enc[wd as usize][32 / $step - 1](c_ptr, s_ptr);
+            c_ptr = c_ptr.offset(32);
             s_ptr = s_ptr.offset(wd as isize);
-            o_ptr = o_ptr.offset(32);
           }
-          left &= 31;
+          len &= 31;
 
-          // Decode any runs of step integers
-          let mut s_bits: usize = 32;
-          if left >= $step {
-            let part = left - left % $step;
-            pfor_codec::$dec[wd - 1][part / $step - 1](s_ptr, o_ptr);
-            s_ptr = s_ptr.offset(((part * wd) / 32) as isize);
-            o_ptr = o_ptr.offset(part as isize);
-            left -= part;
-            s_bits -= (part * wd) & 31;
+          // Encode any runs of step integers
+          let mut s_bits: u32 = 32;
+          if len >= $step {
+            let part: usize = len - len % $step;
+            let bits: u32 = part as u32 * wd;
+            pfor_codec::$enc[wd as usize][(part / $step - 1) as usize](c_ptr, s_ptr);
+            c_ptr = c_ptr.offset(part as isize);
+            s_ptr = s_ptr.offset((bits / 32) as isize);
+            s_bits -= bits & 31;
+            len -= part;
           }
 
           // If there are still entries...
-          if left > 0 {
-            let mut o_bits: usize;
-            let mask: $ty = !0 >> ($ty::width() - wd);
+          if len > 0 {
+            let mut i_bits: u32;
+            // If s_bits points to unitialized word...
+            if s_bits == 32 {
+              *s_ptr = 0;
+            }
+
+            // Encode any remaining integers one by one
+            for a in 0..len {
+              i_bits = wd;
+
+              // Encode in the available space
+              let lsft = 32 - s_bits;
+              *s_ptr |= (*c_ptr as u32) << lsft;
+
+              // While the available space is not enough...
+              while s_bits < i_bits {
+                i_bits -= s_bits;
+                s_ptr = s_ptr.offset(1);
+                *s_ptr = (*c_ptr >> (wd - i_bits)) as u32;
+                s_bits = 32;
+              }
+              s_bits -= i_bits;
+
+              if a < len - 1 {
+                c_ptr = c_ptr.offset(1);
+                if s_bits == 0 {
+                  s_ptr = s_ptr.offset(1);
+                  *s_ptr = 0;
+                  s_bits = 32;
+                }
+              }
+            }
+          }
+          if s_bits < 32 {
+            s_ptr = s_ptr.offset(1);
+          }
+        }
+        s_ptr
+      }
+
+      unsafe fn _decode_tail(s_ptr: *const u32,
+                             o_ptr: *mut $ty,
+                             e_cnt: usize,
+                             e_wd: u32) -> *const u32 {
+        let mut s_ptr: *const u32 = s_ptr;
+        let mut o_ptr: *mut $ty = o_ptr;
+        let mut e_cnt: usize = e_cnt;
+
+        // Decode any runs of 128 integers
+        if e_cnt == 128 {
+          pfor_codec::$dec_simd[e_wd as usize](s_ptr, o_ptr);
+          s_ptr = s_ptr.offset(4 * e_wd as isize);
+        } else {
+          // Decode any runs of 32 integers
+          for _ in 0..(e_cnt >> 5) {
+            pfor_codec::$dec[e_wd as usize][32 / $step - 1](s_ptr, o_ptr);
+            s_ptr = s_ptr.offset(e_wd as isize);
+            o_ptr = o_ptr.offset(32);
+          }
+          e_cnt &= 31;
+
+          // Decode any runs of step integers
+          let mut s_bits: u32 = 32;
+          if e_cnt >= $step {
+            let part: usize = e_cnt - e_cnt % $step;
+            pfor_codec::$dec[e_wd as usize][(part / $step - 1) as usize](s_ptr, o_ptr);
+            s_ptr = s_ptr.offset(((part as u32 * e_wd) / 32) as isize);
+            o_ptr = o_ptr.offset(part as isize);
+            s_bits -= (part as u32 * e_wd) & 31;
+            e_cnt -= part;
+          }
+
+          // If there are still entries...
+          if e_cnt > 0 {
+            let mut o_bits: u32;
+            let mask: $ty = {
+              if e_wd > 0 { !0 >> ($ty::width() - e_wd) } else { 0 }
+            };
 
             // Decode any remaining integers one by one
-            for _ in 0..(left - 1) {
-              o_bits = wd;
+            for _ in 0..(e_cnt - 1) {
+              o_bits = e_wd;
 
               // Decode anything in the available space
-              let rsft = 32 - s_bits;
+              let rsft: u32 = 32 - s_bits;
               *o_ptr = (*s_ptr >> rsft) as $ty;
 
               // While the available space is not enough...
               while o_bits > s_bits {
                 o_bits -= s_bits;
                 s_ptr = s_ptr.offset(1);
-                *o_ptr |= (*s_ptr as $ty) << (wd - o_bits);
+                *o_ptr |= (*s_ptr as $ty) << (e_wd - o_bits);
                 s_bits = 32;
               }
               s_bits -= o_bits;
@@ -580,24 +641,32 @@ macro_rules! encodable_unsigned {
                 s_bits = 32;
               }
             }
-            // Final iteration moved out of for loop to avoid branch
-            o_bits = wd;
+
+            // Final iteration moved out of loop to avoid branching
+            o_bits = e_wd;
 
             // Decode anything in the available space
-            let rsft = 32 - s_bits;
+            let rsft: u32 = 32 - s_bits;
             *o_ptr = (*s_ptr >> rsft) as $ty;
 
             // While the available space is not enough...
             while o_bits > s_bits {
               o_bits -= s_bits;
               s_ptr = s_ptr.offset(1);
-              *o_ptr |= (*s_ptr as $ty) << (wd - o_bits);
+              *o_ptr |= (*s_ptr as $ty) << (e_wd - o_bits);
               s_bits = 32;
             }
+            s_bits -= o_bits;
 
             *o_ptr &= mask;
           }
+
+          // If a words is partially consumed...
+          if s_bits < 32 {
+            s_ptr = s_ptr.offset(1);
+          }
         }
+        s_ptr
       }
     }
   )*)
@@ -607,21 +676,21 @@ encodable_unsigned!{
   (u8: 16,
    ENCODE_U8, DECODE_U8,
    ENCODE_SIMD_U8, DECODE_SIMD_U8,
-   encode_zz_u8, decode_zz_u8)
+   encode_zz_shift_u8, decode_zz_shift_u8)
   (u16: 16,
    ENCODE_U16, DECODE_U16,
-   ENCODE_SIMD_U16, DECODE_SIMD_U16
-   encode_zz_u16, decode_zz_u16)
+   ENCODE_SIMD_U16, DECODE_SIMD_U16,
+   encode_zz_shift_u16, decode_zz_shift_u16)
   (u32: 16,
    ENCODE_U32, DECODE_U32,
-   ENCODE_SIMD_U32, DECODE_SIMD_U32
-   encode_zz_u32, decode_zz_u32)
+   ENCODE_SIMD_U32, DECODE_SIMD_U32,
+   encode_zz_shift_u32, decode_zz_shift_u32)
   (u64: 16,
    ENCODE_U64, DECODE_U64,
-   ENCODE_SIMD_U64, DECODE_SIMD_U64
-   encode_zz_u64, decode_zz_u64)
+   ENCODE_SIMD_U64, DECODE_SIMD_U64,
+   encode_zz_shift_u64, decode_zz_shift_u64)
 }
-
+/*
 macro_rules! encodable_signed {
   ($(($it: ident, $ut: ident: $enc_zz: ident, $dec_zz: ident))*) => ($(
     impl EncodablePrivate<$it> for Patched<$it> {
@@ -629,7 +698,6 @@ macro_rules! encodable_signed {
         let mut scratch: Vec<$ut> = mem::transmute(input.to_vec());
         let ptr: *mut $ut = scratch.as_mut_ptr();
         let len: usize = scratch.len();
-        pfor_codec::$enc_zz(ptr, len);
         Patched::<$ut>::_encode(&scratch)
       }
 
@@ -637,12 +705,21 @@ macro_rules! encodable_signed {
         let mut scratch: Vec<$ut> = try!(Patched::<$ut>::_decode(storage));
         let ptr: *mut $ut = scratch.as_mut_ptr();
         let len: usize = scratch.len();
-        pfor_codec::$dec_zz(ptr, len);
         Ok(mem::transmute(scratch))
       }
 
-      unsafe fn _decode_final(s_ptr: *const u32, o_ptr: *mut $it) {
-        Patched::<$ut>::_decode_final(s_ptr, o_ptr as *mut $ut)
+      unsafe fn _encode_tail(c_ptr: *const $it,
+                              s_ptr: *mut u32,
+                              len: usize,
+                              wd: usize) -> *mut u32 {
+        Patched::<$ut>::_encode_tail(c_ptr as *mut $ut, s_ptr, len, wd)
+      }
+
+      unsafe fn _decode_tail(s_ptr: *const u32,
+                              o_ptr: *mut $it,
+                              len: usize,
+                              wd: usize) -> *const u32 {
+        Patched::<$ut>::_decode_tail(s_ptr, o_ptr as *mut $ut, len, wd)
       }
     }
   )*)
@@ -857,8 +934,8 @@ macro_rules! access_unsigned {
 
         // Block found, decode the value
         s_ptr = s_ptr.offset(wrd_to_blk as isize);
-        let wd: usize = ((*s_ptr & WIDTH_MASK) + 1) as usize;
-        let left: usize = (((*s_ptr & ENTRIES_MASK) >> 6) + 1) as usize;
+        let wd: usize = ((*s_ptr & E_WIDTH) + 1) as usize;
+        let left: usize = (((*s_ptr & E_COUNT) >> 6) + 1) as usize;
         s_ptr = s_ptr.offset(1);
 
         let idx: usize = index & 127;
@@ -945,7 +1022,7 @@ macro_rules! access_unsigned {
         // Block size is known for all but the final block
         for _ in 0..(e_blk - s_blk) {
           // Find the width of the block
-          let wd: usize = ((*s_ptr & WIDTH_MASK) + 1) as usize;
+          let wd: usize = ((*s_ptr & E_WIDTH) + 1) as usize;
           s_ptr = s_ptr.offset(1);
 
           // Decode the block
@@ -955,7 +1032,9 @@ macro_rules! access_unsigned {
         }
 
         // Final block
-        let left: usize = (((*s_ptr & ENTRIES_MASK) >> 6) + 1) as usize;
+        let left: usize = (((*s_ptr & E_COUNT) >> 6) + 1) as usize;
+        let wd: usize = ((*s_ptr & E_WIDTH) + 1) as usize;
+        s_ptr = s_ptr.offset(1);
 
         // Checks a lower bound on the length
         let len_bnd: usize = (e_blk << 7) + left;
@@ -970,7 +1049,7 @@ macro_rules! access_unsigned {
         }
 
         // Decode final block
-        Patched::<$ty>::_decode_final(s_ptr, o_ptr);
+        Patched::<$ty>::_decode_tail(s_ptr, o_ptr, left, wd);
 
         // Shift the entries into the desired range
         let sft: usize = range.start - (s_blk << 7);
@@ -1017,7 +1096,7 @@ macro_rules! access_unsigned {
         // Block size is known for all but the final block
         for _ in 0..(n_blks - s_blk) {
           // Find the width of the block
-          let wd: usize = ((*s_ptr & WIDTH_MASK) + 1) as usize;
+          let wd: usize = ((*s_ptr & E_WIDTH) + 1) as usize;
           s_ptr = s_ptr.offset(1);
 
           // Decode the block
@@ -1027,10 +1106,12 @@ macro_rules! access_unsigned {
         }
 
         // Final block
-        let left: usize = (((*s_ptr & ENTRIES_MASK) >> 6) + 1) as usize;
-        let len: usize = (n_blks << 7) + left;
+        let left: usize = (((*s_ptr & E_COUNT) >> 6) + 1) as usize;
+        let wd: usize = ((*s_ptr & E_WIDTH) + 1) as usize;
+        s_ptr = s_ptr.offset(1);
 
         // Check a lower bound on the length
+        let len: usize = (n_blks << 7) + left;
         if range.start > len {
           panic!(format!("range start is {} but length is {}", range.start, len))
         }
@@ -1039,7 +1120,7 @@ macro_rules! access_unsigned {
         }
 
         // Decode final block
-        Patched::<$ty>::_decode_final(s_ptr, o_ptr);
+        Patched::<$ty>::_decode_tail(s_ptr, o_ptr, left, wd);
 
         // Shift the entries into the desired range
         let sft: usize = range.start - (s_blk << 7);
@@ -1102,4 +1183,4 @@ access_signed!{
   (i16, u16: decode_zz_u16)
   (i32, u32: decode_zz_u32)
   (i64, u64: decode_zz_u64)
-}
+}*/

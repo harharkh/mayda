@@ -9,7 +9,7 @@
 //! `decode_zz!` syntax extensions of `pfor_macros` to a separate compilation
 //! unit. More extensive documentation is given in the `pfor_macros` crate.
 
-#![feature(plugin)]
+#![feature(plugin, const_fn)]
 #![plugin(pfor_macros)]
 
 extern crate simd;

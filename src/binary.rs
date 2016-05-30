@@ -237,7 +237,7 @@ macro_rules! encodable_unsigned {
         }
         
         // Lengths of index header and blocks
-        let base_wd: usize = ($ty::width() - 1).bits();
+        let base_wd: usize = $ty::width().bits() - 1;
         let w_words: usize = lvls.iter()
           .enumerate()
           .map(|(a, x)| utility::words_for_bits((base_wd + a) * x.len()))
@@ -422,7 +422,7 @@ macro_rules! encodable_unsigned {
 
         // Length of index header
         let n_lvls: usize = n_blks.bits();
-        let base_wd: usize  = ($ty::width() - 1).bits();
+        let base_wd: usize  = $ty::width().bits() - 1;
         let mut w_words: usize = 0;
         for a in 0..n_lvls {
           let len: usize = ((n_blks - (1 << a)) >> (a + 1)) + 1;
@@ -642,7 +642,7 @@ impl<B> Access<ops::RangeFull> for Binary<B> where B: Bits {
 /// be used outside of the implementation of Access.
 fn words_to_block(n_blks: usize, blk: usize, ty_wd: usize, s_head: *const u32) -> usize {
   // Find the block containing the index
-  let base_wd: usize = (ty_wd - 1).bits();
+  let base_wd: usize = ty_wd.bits() - 1;
   let mut lvl: usize = 0;
   let mut lvl_head: usize = 1;
   let mut wrd_to_blk: usize = 0;

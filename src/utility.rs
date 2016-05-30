@@ -23,18 +23,19 @@ pub const U64_FLAG: u32 = 0x00000003;
 /// used as a bound on the `Encodable` trait.
 pub trait Bits {
   /// Number of bits in the standard representation.
-  fn width() -> usize;
-  /// Number of bits required to represent the number in binary.
-  fn bits(&self) -> usize;
+  fn width() -> u32;
+  /// Number of bits required to represent the number in binary. Notice that
+  /// `0.bits() == 0u32`.
+  fn bits(&self) -> u32;
 }
 
 macro_rules! bits_impl {
   ($(($t: ty: $size: expr))*) => ($(
     impl Bits for $t {
       #[inline]
-      fn width() -> usize { $size }
+      fn width() -> u32 { $size }
       #[inline]
-      fn bits(&self) -> usize { $size - self.leading_zeros() as usize }
+      fn bits(&self) -> u32 { $size - self.leading_zeros() }
     }
   )*)
 }
@@ -44,12 +45,12 @@ bits_impl!{
   (u16: 16)
   (u32: 32)
   (u64: 64)
-  (usize: mem::size_of::<usize>() * 8)
+  (usize: mem::size_of::<usize>() as u32 * 8)
   (i8: 8)
   (i16: 16)
   (i32: 32)
   (i64: 64)
-  (isize: mem::size_of::<isize>() * 8)
+  (isize: mem::size_of::<isize>() as u32 * 8)
 }
 
 /// Indicates that the type can be encoded and decoded by `pfor`.
@@ -86,7 +87,7 @@ pub trait Access<Idx> {
 /// # Panics
 ///
 /// Integer overflow occurs when the value of bits is above `usize::MAX - 31`.
-/// This should not happen within `pfor` since the function is only used to
+/// This should not happen within `pfor` since this function is only used to
 /// find the number of words required for a block of up to 128 integers.
 ///
 /// # Examples
@@ -98,8 +99,8 @@ pub trait Access<Idx> {
 /// assert_eq!(4, words);
 /// ```
 #[inline]
-pub fn words_for_bits(bits: usize) -> usize {
-  (bits + 31) >> 5
+pub fn words_for_bits(bits: u32) -> usize {
+  ((bits + 31) >> 5) as usize
 }
 
 /// A modified version of the Floyd-Rivest algorithm with fewer comparisions

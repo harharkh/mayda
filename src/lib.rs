@@ -4,12 +4,11 @@
 // http://opensource.org/licenses/MIT>. This file may not be copied, modified,
 // or distributed except according to those terms.
 
-#![feature(specialization)]
-#![feature(iter_arith)]
+#![feature(specialization, iter_arith, inclusive_range_syntax)]
 
 extern crate pfor_codec;
 
-pub mod binary;
+//pub mod binary;
 pub mod error;
 pub mod patched;
 pub mod utility;

@@ -129,10 +129,8 @@
 //! }
 //! ```
 
-#![feature(plugin_registrar)]
-#![feature(rustc_private)]
-#![feature(quote)]
-#![feature(inclusive_range_syntax)]
+#![feature(plugin_registrar, rustc_private, quote)]
+#![feature(inclusive_range_syntax, step_by)]
 
 // Unused import in quote_tokens! macro
 #![allow(unused_imports)]
@@ -174,24 +172,32 @@ fn encode_expand(cx: &mut ExtCtxt,
   };
   let ut = token::str_to_ident(&*format!("u{}", width));
   assert_eq!(32 % step, 0);
-  let lengths: Vec<usize> = (1...(32 / step)).map(|a| a * step).collect();
+  let lengths: Vec<usize> = (step...32).step_by(step).collect();
 
   // idents: tokens used to define the ENCODE_T
   // items: definitions of the functions
   let mut idents = vec![token::OpenDelim(token::Bracket)];
   let mut items = Vec::new();
-  for wd in 1...width {
+  for wd in 0...width {
     idents.push(token::OpenDelim(token::Bracket));
-    for ln in lengths.iter() {
+    for &ln in &lengths {
       // Name for the function interned
       let name = format!("encode_{}_{}_{}", ut, wd, ln);
       let ident = token::str_to_ident(&*name);
       idents.push(token::Ident(ident));
       idents.push(token::Comma);
 
+      // Nothing to write
+      if wd == 0 {
+        items.push(
+          quote_item!(cx,
+            unsafe fn $ident(_: *const $ut, _: *mut u32) { }
+          ).unwrap()
+        );
+        continue
+      }
+
       // Function definition constructed here
-      let mut i_bits: usize;
-      let mut s_bits: usize = 32;
       let mut tokens = quote_tokens!(cx,
         let mut i_ptr = i_ptr;
         let mut s_ptr = s_ptr;
@@ -199,7 +205,9 @@ fn encode_expand(cx: &mut ExtCtxt,
       );
 
       // For every integer to be encoded...
-      for a in 0..*ln {
+      let mut i_bits: usize;
+      let mut s_bits: usize = 32;
+      for a in 0..ln {
         i_bits = wd;
 
         // Encode in the available space
@@ -275,10 +283,11 @@ fn encode_expand(cx: &mut ExtCtxt,
   // ENCODE_T definition pushed to items
   let name = format!("encode_{}", ut).to_uppercase();
   let ident = token::str_to_ident(&*name);
-  let tmp = lengths.len();
+  let len1 = lengths.len();
+  let len2 = width + 1;
   items.push(
     quote_item!(cx,
-      pub const $ident: [[unsafe fn(*const $ut, *mut u32); $tmp]; $width] = $ttree;
+      pub const $ident: [[unsafe fn(*const $ut, *mut u32); $len1]; $len2] = $ttree;
     ).unwrap()
   );
   
@@ -302,27 +311,37 @@ fn decode_expand(cx: &mut ExtCtxt,
   };
   let ut = token::str_to_ident(&*format!("u{}", width));
   assert_eq!(32 % step, 0);
-  let lengths: Vec<usize> = (1...(32 / step)).map(|a| a * step).collect();
+  let lengths: Vec<usize> = (step...32).step_by(step).collect();
 
   // idents: tokens used to define the const DECODE_T
   // items: definitions of the functions
   let mut idents = vec![token::OpenDelim(token::Bracket)];
   let mut items = Vec::new();
-  for wd in 1...width {
+  for wd in 0...width {
     idents.push(token::OpenDelim(token::Bracket));
-    for ln in lengths.iter() {
+    for &ln in &lengths {
       // Name for the function interned
       let name = format!("decode_{}_{}_{}", ut, wd, ln);
       let ident = token::str_to_ident(&*name);
       idents.push(token::Ident(ident));
       idents.push(token::Comma);
 
+      // Nothing to read
+      if wd == 0 {
+        items.push(
+          quote_item!(cx,
+            unsafe fn $ident(_: *const u32, o_ptr: *mut $ut) {
+              std::ptr::write_bytes(o_ptr, 0u8, $ln);
+            }
+          ).unwrap()
+        );
+        continue
+      }
+
       // Function definition constructed here
-      let mut s_bits: usize = 32;
-      let mut o_bits: usize;
       let mut tokens = {
         // Handles unused mut warning
-        if wd * *ln > 32 {
+        if wd * ln > 32 {
           quote_tokens!(cx,
             let mut s_ptr = s_ptr;
             let mut o_ptr = o_ptr;
@@ -345,7 +364,9 @@ fn decode_expand(cx: &mut ExtCtxt,
       );
 
       // For every integer to be decoded...
-      for a in 0..*ln {
+      let mut s_bits: usize = 32;
+      let mut o_bits: usize;
+      for a in 0..ln {
         o_bits = wd;
         tokens = quote_tokens!(cx, $tokens
           out =
@@ -427,10 +448,11 @@ fn decode_expand(cx: &mut ExtCtxt,
   // DECODE_T definition pushed to items
   let name = format!("decode_{}", ut).to_uppercase();
   let ident = token::str_to_ident(&*name);
-  let tmp = lengths.len();
+  let len1 = lengths.len();
+  let len2 = width + 1;
   items.push(
     quote_item!(cx,
-      pub const $ident: [[unsafe fn(*const u32, *mut $ut); $tmp]; $width] = $ttree;
+      pub const $ident: [[unsafe fn(*const u32, *mut $ut); $len1]; $len2] = $ttree;
     ).unwrap()
   );
   
@@ -472,48 +494,46 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
       parameters: ast::PathParameters::none()
     }
   );
-  let load = quote_tokens!(cx,
-    let rhs = $load(i_slice, i_ind);
-  );
 
   // idents: tokens used to define the ENCODE_SIMD_T
   // items: definitions of the functions
   let mut idents = vec![token::OpenDelim(token::Bracket)];
   let mut items = Vec::new();
-  for wd in 1...width {
+  for wd in 0...width {
     // Name for the function interned
     let name = format!("encode_simd_{}_{}", ut, wd);
     let ident = token::str_to_ident(&*name);
     idents.push(token::Ident(ident));
     idents.push(token::Comma);
 
+    // Nothing to write
+    if wd == 0 {
+      items.push(
+        quote_item!(cx,
+          unsafe fn $ident(_: *const $ut, _: *mut u32) { }
+        ).unwrap()
+      );
+      continue
+    }
+
     // Function definition constructed here
-    let s_len = wd * lanes;
-    let mut i_bits: usize;
-    let mut s_bits: usize = width;
+    let s_len: usize = 128 * wd / width;
     let mut tokens = quote_tokens!(cx,
       let i_slice = std::slice::from_raw_parts(i_ptr, 128);
-      let mut s_slice = std::slice::from_raw_parts_mut(s_ptr as *mut $ut, $s_len);
-      let mut i_ind = 0;
-    );
-    // Handles unused mut warning
-    tokens = {
-      if wd == 1 {
-        quote_tokens!(cx, $tokens
-          let s_ind = 0;
-        )
-      } else {
-        quote_tokens!(cx, $tokens
-          let mut s_ind = 0;
-        )
-      }
-    };
-    tokens = quote_tokens!(cx, $tokens
-      $load
-      let mut lhs =
+      let s_slice = std::slice::from_raw_parts_mut(s_ptr as *mut $ut, $s_len);
     );
 
+    let mut i_ind: usize = 0;
+    let mut s_ind: usize = 0;
+    tokens = quote_tokens!(cx, $tokens
+      let rhs = $load(i_slice, $i_ind);
+      let mut lhs =
+    );
+    i_ind += lanes;
+
     // For every integer to be encoded...
+    let mut i_bits: usize;
+    let mut s_bits: usize = width;
     for a in 0..width {
       i_bits = wd;
 
@@ -533,27 +553,27 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
       if s_bits < i_bits {
         i_bits -= s_bits;
         tokens = quote_tokens!(cx, $tokens
-          lhs.store(s_slice, s_ind);
-          s_ind += $lanes;
+          lhs.store(s_slice, $s_ind);
           lhs = rhs >> $s_bits;
         );
         s_bits = width;
+        s_ind += lanes;
       }
       s_bits -= i_bits;
 
       // Prepare for the following iteration
       if a < width - 1 {
         tokens = quote_tokens!(cx, $tokens
-          i_ind += $lanes;
-          $load
+          let rhs = $load(i_slice, $i_ind);
         );
+        i_ind += lanes;
         if s_bits == 0 {
           tokens = quote_tokens!(cx, $tokens
-            lhs.store(s_slice, s_ind);
-            s_ind += $lanes;
+            lhs.store(s_slice, $s_ind);
             lhs =
           );
           s_bits = width;
+          s_ind += lanes;
         } else {
           tokens = quote_tokens!(cx, $tokens
             lhs = lhs |
@@ -561,7 +581,7 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
         }
       } else {
         tokens = quote_tokens!(cx, $tokens
-          lhs.store(s_slice, s_ind);
+          lhs.store(s_slice, $s_ind);
         );
       }
     }
@@ -586,9 +606,10 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
   // ENCODE_SIMD_T definition pushed to items
   let name = format!("encode_simd_{}", ut).to_uppercase();
   let ident = token::str_to_ident(&*name);
+  let len1 = width + 1;
   items.push(
     quote_item!(cx,
-      pub const $ident: [unsafe fn(*const $ut, *mut u32); $width] = $ttree;
+      pub const $ident: [unsafe fn(*const $ut, *mut u32); $len1] = $ttree;
     ).unwrap()
   );
 
@@ -639,55 +660,56 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
       parameters: ast::PathParameters::none()
     }
   );
-  let load = quote_tokens!(cx,
-    let rhs = $load(s_slice, s_ind);
-  );
 
   // idents: tokens used to define the const DECODE_SIMD_T
   // items: definitions of the functions
   let mut idents = vec![token::OpenDelim(token::Bracket)];
   let mut items = Vec::new();
-  for wd in 1...width {
+  for wd in 0...width {
     // Name for the function interned
     let name = format!("decode_simd_{}_{}", ut, wd);
     let ident = token::str_to_ident(&*name);
     idents.push(token::Ident(ident));
     idents.push(token::Comma);
 
+    // Nothing to read
+    if wd == 0 {
+      items.push(
+        quote_item!(cx,
+          unsafe fn $ident(_: *const u32, o_ptr: *mut $ut) {
+            std::ptr::write_bytes(o_ptr, 0u8, 128);
+          }
+        ).unwrap()
+      );
+      continue
+    }
+
     // Function definition constructed here
-    let s_len = wd * lanes;
-    let mut s_bits: usize = width;
-    let mut o_bits: usize;
+    let s_len: usize = 128 * wd / width;
     let mut tokens = quote_tokens!(cx,
       let s_slice = std::slice::from_raw_parts(s_ptr as *const $ut, $s_len);
-      let mut o_slice = std::slice::from_raw_parts_mut(o_ptr, 128);
-      let mut o_ind = 0;
+      let o_slice = std::slice::from_raw_parts_mut(o_ptr, 128);
     );
-    // Handles unused mut warning
-    tokens = {
-      if wd == 1 {
-        quote_tokens!(cx, $tokens
-          let s_ind = 0;
-        )
-      } else {
-        quote_tokens!(cx, $tokens
-          let mut s_ind = 0;
-        )
-      }
-    };
+
     // Handes unused variable warning
     let mask_sft = width - wd;
-    if mask_sft > 0 {
+    if mask_sft > 0 && wd != width {
       tokens = quote_tokens!(cx, $tokens
         let mask = $splat(!0) >> $mask_sft;
       );
     }
+
+    let mut o_ind: usize = 0;
+    let mut s_ind: usize = 0;
     tokens = quote_tokens!(cx, $tokens
-      $load
+      let rhs = $load(s_slice, $s_ind);
       let mut lhs;
     );
+    s_ind += lanes;
 
     // For every integer to be decoded...
+    let mut s_bits: usize = width;
+    let mut o_bits: usize;
     for a in 0..width {
       o_bits = wd;
       tokens = quote_tokens!(cx, $tokens
@@ -712,35 +734,33 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
       if o_bits > s_bits {
         o_bits -= s_bits;
         tokens = quote_tokens!(cx, $tokens
-          s_ind += $lanes;
-          $load
+          let rhs = $load(s_slice, $s_ind);
           lhs = lhs | rhs << $s_bits;
         );
         s_bits = width;
+        s_ind += lanes;
       }
       s_bits -= o_bits;
 
       // Move decoded value to o_ptr
-      if mask_sft > 0 {
+      if mask_sft > 0 && wd != width {
         tokens = quote_tokens!(cx, $tokens
           lhs = lhs & mask;
         );
       }
       tokens = quote_tokens!(cx, $tokens
-        lhs.store(o_slice, o_ind);
+        lhs.store(o_slice, $o_ind);
       );
+      o_ind += lanes;
 
       // Prepare for the following iteration
       if a < width - 1 {
-        tokens = quote_tokens!(cx, $tokens
-          o_ind += $lanes;
-        );
         if s_bits == 0 {
           tokens = quote_tokens!(cx, $tokens
-            s_ind += $lanes;
-            $load
+            let rhs = $load(s_slice, $s_ind);
           );
           s_bits = width;
+          s_ind += lanes;
         }
       }
     }
@@ -765,9 +785,10 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
   // DECODE_SIMD_T definition pushed to items
   let name = format!("decode_simd_{}", ut).to_uppercase();
   let ident = token::str_to_ident(&*name);
+  let len1 = width + 1;
   items.push(
     quote_item!(cx,
-      pub const $ident: [unsafe fn(*const u32, *mut $ut); $width] = $ttree;
+      pub const $ident: [unsafe fn(*const u32, *mut $ut); $len1] = $ttree;
     ).unwrap()
   );
   
