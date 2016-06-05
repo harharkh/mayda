@@ -4,7 +4,7 @@
 // http://opensource.org/licenses/MIT>. This file may not be copied, modified,
 // or distributed except according to those terms.
 
-//! Binary encoding of integer arrays. Designed for moderate compression,
+//! BitPacked encoding of integer arrays. Designed for moderate compression,
 //! random access, and efficient decoding.
 //!
 //! # Performance
@@ -28,11 +28,11 @@
 //! # Examples
 //!
 //! ```
-//! use pfor::utility::{Access, Encodable};
-//! use pfor::binary::Binary;
+//! use mayda::utility::{Access, Encodable};
+//! use mayda::binary::BitPacked;
 //!
 //! let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
-//! let mut bin = Binary::new();
+//! let mut bin = BitPacked::new();
 //! bin.encode(&input).unwrap();
 //!
 //! let output = bin.decode().unwrap();
@@ -49,28 +49,28 @@ use std::marker::PhantomData;
 use std::mem;
 use std::ops;
 
-use pfor_codec;
+use mayda_codec;
 use utility::{self, Bits, Encodable, Access};
 
 const WIDTH_MASK: u32 = 0x0000003f;
 const ENTRIES_MASK: u32 = 0x00001fc0;
 
 /// The type of a binary encoded integer array.
-pub struct Binary<B> {
+pub struct BitPacked<B> {
   storage: Box<[u32]>,
   phantom: PhantomData<B>
 }
 
-impl<B: Bits> Binary<B> {
-  /// Creates an empty Binary.
+impl<B: Bits> BitPacked<B> {
+  /// Creates an empty BitPacked.
   ///
   /// # Examples
   /// ```
   /// use std::mem;
-  /// use pfor::binary::Binary;
-  /// use pfor::utility::Encodable;
+  /// use mayda::binary::BitPacked;
+  /// use mayda::utility::Encodable;
   ///
-  /// let mut bin = Binary::new();
+  /// let mut bin = BitPacked::new();
   ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
   /// bin.encode(&input);
@@ -79,20 +79,20 @@ impl<B: Bits> Binary<B> {
   /// assert_eq!(bytes, 16);
   /// ```
   pub fn new() -> Self {
-    Binary {
+    BitPacked {
       storage: Box::new([0; 0]),
       phantom: PhantomData
     }
   }
 
-  /// Exposes the word storage of the Binary.
+  /// Exposes the word storage of the BitPacked.
   ///
   /// # Examples
   /// ```
-  /// use pfor::binary::Binary;
-  /// use pfor::utility::Encodable;
+  /// use mayda::binary::BitPacked;
+  /// use mayda::utility::Encodable;
   ///
-  /// let mut bin = Binary::new();
+  /// let mut bin = BitPacked::new();
   ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
   /// bin.encode(&input);
@@ -104,7 +104,7 @@ impl<B: Bits> Binary<B> {
     &self.storage
   }
 
-  /// Exposes the word storage of the Binary. Probably unsafe.
+  /// Exposes the word storage of the BitPacked. Probably unsafe.
   pub unsafe fn mut_storage(&mut self) -> &mut Box<[u32]> {
     &mut self.storage
   }
@@ -113,10 +113,10 @@ impl<B: Bits> Binary<B> {
   ///
   /// # Examples
   /// ```
-  /// use pfor::binary::Binary;
-  /// use pfor::utility::Encodable;
+  /// use mayda::binary::BitPacked;
+  /// use mayda::utility::Encodable;
   ///
-  /// let mut bin = Binary::new();
+  /// let mut bin = BitPacked::new();
   ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
   /// bin.encode(&input);
@@ -138,7 +138,7 @@ trait EncodablePrivate<B: Bits> {
 }
 
 /// Default is only for unimplemented types, should not be reachable.
-impl<B> EncodablePrivate<B> for Binary<B> where B: Bits {
+impl<B> EncodablePrivate<B> for BitPacked<B> where B: Bits {
   default unsafe fn _encode(_: &[B]) -> Result<Vec<u32>, super::Error> {
     Err(super::Error::new("Encodable not implemented for this type"))
   }
@@ -152,10 +152,10 @@ impl<B> EncodablePrivate<B> for Binary<B> where B: Bits {
   }
 }
 
-impl<B> Encodable<B> for Binary<B> where B: Bits {
+impl<B> Encodable<B> for BitPacked<B> where B: Bits {
   fn encode(&mut self, input: &[B]) -> Result<(), super::Error> {
     let storage: Vec<u32> = unsafe {
-      try!(Binary::<B>::_encode(input))
+      try!(BitPacked::<B>::_encode(input))
     };
     self.storage = storage.into_boxed_slice();
     Ok(())
@@ -163,7 +163,7 @@ impl<B> Encodable<B> for Binary<B> where B: Bits {
 
   fn decode(&self) -> Result<Vec<B>, super::Error> {
     unsafe {
-      Binary::<B>::_decode(&*self.storage)
+      BitPacked::<B>::_decode(&*self.storage)
     }
   }
 }
@@ -172,7 +172,7 @@ macro_rules! encodable_unsigned {
   ($(($ty: ident: $step: expr,
       $enc: ident, $dec: ident,
       $enc_simd: ident, $dec_simd: ident))*) => ($(
-    impl EncodablePrivate<$ty> for Binary<$ty> {
+    impl EncodablePrivate<$ty> for BitPacked<$ty> {
       unsafe fn _encode(input: &[$ty]) -> Result<Vec<u32>, super::Error> {
         // Nothing to do
         if input.is_empty() { return Ok(Vec::new()) }
@@ -251,7 +251,7 @@ macro_rules! encodable_unsigned {
         let mut storage: Vec<u32> = Vec::with_capacity(s_len);
         let mut s_ptr: *mut u32 = storage.as_mut_ptr();
 
-        // Binary header
+        // BitPacked header
         *s_ptr = (n_blks as u32) << 2 | flag;
         s_ptr = s_ptr.offset(1);
 
@@ -264,7 +264,7 @@ macro_rules! encodable_unsigned {
 
           // Encode any runs of 128 integers 
           for _ in 0..(w_left >> 7) {
-            pfor_codec::ENCODE_SIMD_U64[wd - 1](l_ptr, s_ptr);
+            mayda_codec::ENCODE_SIMD_U64[wd - 1](l_ptr, s_ptr);
             l_ptr = l_ptr.offset(128);
             s_ptr = s_ptr.offset((4 * wd) as isize);
           }
@@ -272,7 +272,7 @@ macro_rules! encodable_unsigned {
 
           // Encode any runs of 32 integers
           for _ in 0..(w_left >> 5) {
-            pfor_codec::ENCODE_U64[wd - 1][32 / $step - 1](l_ptr, s_ptr);
+            mayda_codec::ENCODE_U64[wd - 1][32 / $step - 1](l_ptr, s_ptr);
             l_ptr = l_ptr.offset(32);
             s_ptr = s_ptr.offset(wd as isize);
           }
@@ -282,7 +282,7 @@ macro_rules! encodable_unsigned {
           let mut s_bits: usize = 32;
           if w_left >= $step {
             let part = w_left - w_left % $step;
-            pfor_codec::ENCODE_U64[wd - 1][part / $step - 1](l_ptr, s_ptr);
+            mayda_codec::ENCODE_U64[wd - 1][part / $step - 1](l_ptr, s_ptr);
             l_ptr = l_ptr.offset(part as isize);
             s_ptr = s_ptr.offset(((part * wd) / 32) as isize);
             w_left -= part;
@@ -338,7 +338,7 @@ macro_rules! encodable_unsigned {
           s_ptr = s_ptr.offset(1);
 
           // Encode the block
-          pfor_codec::$enc_simd[*wd_1 as usize](i_ptr, s_ptr);
+          mayda_codec::$enc_simd[*wd_1 as usize](i_ptr, s_ptr);
           i_ptr = i_ptr.offset(128);
           s_ptr = s_ptr.offset((4 * (wd_1 + 1)) as isize);
         }
@@ -349,11 +349,11 @@ macro_rules! encodable_unsigned {
 
         // Encode any runs of 128 integers
         if i_left == 128 {
-          pfor_codec::$enc_simd[tail_wd - 1](i_ptr, s_ptr);
+          mayda_codec::$enc_simd[tail_wd - 1](i_ptr, s_ptr);
         } else {
           // Encode any runs of 32 integers
           for _ in 0..(i_left >> 5) {
-            pfor_codec::$enc[tail_wd - 1][32 / $step - 1](i_ptr, s_ptr);
+            mayda_codec::$enc[tail_wd - 1][32 / $step - 1](i_ptr, s_ptr);
             i_ptr = i_ptr.offset(32);
             s_ptr = s_ptr.offset(tail_wd as isize);
           }
@@ -363,7 +363,7 @@ macro_rules! encodable_unsigned {
           let mut s_bits: usize = 32;
           if i_left >= $step {
             let part = i_left - i_left % $step;
-            pfor_codec::$enc[tail_wd - 1][part / $step - 1](i_ptr, s_ptr);
+            mayda_codec::$enc[tail_wd - 1][part / $step - 1](i_ptr, s_ptr);
             i_ptr = i_ptr.offset(part as isize);
             s_ptr = s_ptr.offset(((part * tail_wd) / 32) as isize);
             i_left -= part;
@@ -441,7 +441,7 @@ macro_rules! encodable_unsigned {
           s_ptr = s_ptr.offset(1);
 
           // Decode the block
-          pfor_codec::$dec_simd[wd - 1](s_ptr, o_ptr);
+          mayda_codec::$dec_simd[wd - 1](s_ptr, o_ptr);
           s_ptr = s_ptr.offset(4 * wd as isize);
           o_ptr = o_ptr.offset(128);
         }
@@ -449,7 +449,7 @@ macro_rules! encodable_unsigned {
         // Final block
         let o_left: usize = (((*s_ptr & ENTRIES_MASK) >> 6) + 1) as usize;
         let o_len: usize = (n_blks << 7) + o_left;
-        Binary::<$ty>::_decode_final(s_ptr, o_ptr);
+        BitPacked::<$ty>::_decode_final(s_ptr, o_ptr);
 
         // Set the length of output AFTER everything is initialized
         output.set_len(o_len);
@@ -467,11 +467,11 @@ macro_rules! encodable_unsigned {
 
         // Decode any runs of 128 integers
         if left == 128 {
-          pfor_codec::$dec_simd[wd - 1](s_ptr, o_ptr);
+          mayda_codec::$dec_simd[wd - 1](s_ptr, o_ptr);
         } else {
           // Decode any runs of 32 integers
           for _ in 0..(left >> 5) {
-            pfor_codec::$dec[wd - 1][32 / $step - 1](s_ptr, o_ptr);
+            mayda_codec::$dec[wd - 1][32 / $step - 1](s_ptr, o_ptr);
             s_ptr = s_ptr.offset(wd as isize);
             o_ptr = o_ptr.offset(32);
           }
@@ -481,7 +481,7 @@ macro_rules! encodable_unsigned {
           let mut s_bits: usize = 32;
           if left >= $step {
             let part = left - left % $step;
-            pfor_codec::$dec[wd - 1][part / $step - 1](s_ptr, o_ptr);
+            mayda_codec::$dec[wd - 1][part / $step - 1](s_ptr, o_ptr);
             s_ptr = s_ptr.offset(((part * wd) / 32) as isize);
             o_ptr = o_ptr.offset(part as isize);
             left -= part;
@@ -549,25 +549,25 @@ encodable_unsigned!{
 
 macro_rules! encodable_signed {
   ($(($it: ident, $ut: ident: $enc_zz: ident, $dec_zz: ident))*) => ($(
-    impl EncodablePrivate<$it> for Binary<$it> {
+    impl EncodablePrivate<$it> for BitPacked<$it> {
       unsafe fn _encode(input: &[$it]) -> Result<Vec<u32>, super::Error> {
         let mut scratch: Vec<$ut> = mem::transmute(input.to_vec());
         let ptr: *mut $ut = scratch.as_mut_ptr();
         let len: usize = scratch.len();
-        pfor_codec::$enc_zz(ptr, len);
-        Binary::<$ut>::_encode(&scratch)
+        mayda_codec::$enc_zz(ptr, len);
+        BitPacked::<$ut>::_encode(&scratch)
       }
 
       unsafe fn _decode(storage: &[u32]) -> Result<Vec<$it>, super::Error> {
-        let mut scratch: Vec<$ut> = try!(Binary::<$ut>::_decode(storage));
+        let mut scratch: Vec<$ut> = try!(BitPacked::<$ut>::_decode(storage));
         let ptr: *mut $ut = scratch.as_mut_ptr();
         let len: usize = scratch.len();
-        pfor_codec::$dec_zz(ptr, len);
+        mayda_codec::$dec_zz(ptr, len);
         Ok(mem::transmute(scratch))
       }
 
       unsafe fn _decode_final(s_ptr: *const u32, o_ptr: *mut $it) {
-        Binary::<$ut>::_decode_final(s_ptr, o_ptr as *mut $ut)
+        BitPacked::<$ut>::_decode_final(s_ptr, o_ptr as *mut $ut)
       }
     }
   )*)
@@ -589,7 +589,7 @@ trait AccessPrivate<Idx> {
 
 macro_rules! access_default {
   ($(($idx: ty, $output: ty))*) => ($(
-    impl<B> AccessPrivate<$idx> for Binary<B> where B: Bits {
+    impl<B> AccessPrivate<$idx> for BitPacked<B> where B: Bits {
       type Output = $output;
       default unsafe fn _access(_: &[u32], _: $idx) -> $output {
         panic!("Access not implemented for this type");
@@ -606,11 +606,11 @@ access_default!{
 
 macro_rules! access {
   ($(($idx: ty, $output: ty))*) => ($(
-    impl<B> Access<$idx> for Binary<B> where B: Bits {
+    impl<B> Access<$idx> for BitPacked<B> where B: Bits {
       type Output = $output;
       fn access(&self, index: $idx) -> $output {
         unsafe {
-          Binary::<B>::_access(&*self.storage, index)
+          BitPacked::<B>::_access(&*self.storage, index)
         }
       }
     }
@@ -623,14 +623,14 @@ access!{
   (ops::RangeFrom<usize>, Vec<B>)
 }
 
-impl<B> Access<ops::RangeTo<usize>> for Binary<B> where B: Bits {
+impl<B> Access<ops::RangeTo<usize>> for BitPacked<B> where B: Bits {
   type Output = Vec<B>;
   fn access(&self, range: ops::RangeTo<usize>) -> Vec<B> {
     self.access(0..range.end)
   }
 }
 
-impl<B> Access<ops::RangeFull> for Binary<B> where B: Bits {
+impl<B> Access<ops::RangeFull> for BitPacked<B> where B: Bits {
   type Output = Vec<B>;
   fn access(&self, _: ops::RangeFull) -> Vec<B> {
     self.decode().unwrap()
@@ -762,7 +762,7 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: usize, s_head: *const u32) -
 
 macro_rules! access_unsigned {
   ($(($ty: ident: $step: expr, $dec: ident, $dec_simd: ident))*) => ($(
-    impl AccessPrivate<usize> for Binary<$ty> {
+    impl AccessPrivate<usize> for BitPacked<$ty> {
       unsafe fn _access(storage: &[u32], index: usize) -> $ty {
         if storage.is_empty() {
           panic!(format!("index is {} but length is 0", index))
@@ -830,7 +830,7 @@ macro_rules! access_unsigned {
       }
     }
 
-    impl AccessPrivate<ops::Range<usize>> for Binary<$ty> {
+    impl AccessPrivate<ops::Range<usize>> for BitPacked<$ty> {
       unsafe fn _access(storage: &[u32], range: ops::Range<usize>) -> Vec<$ty> {
         if range.end < range.start {
           panic!(format!("range start is {} but range end is {}", range.start, range.end))
@@ -874,7 +874,7 @@ macro_rules! access_unsigned {
           s_ptr = s_ptr.offset(1);
 
           // Decode the block
-          pfor_codec::$dec_simd[wd - 1](s_ptr, o_ptr);
+          mayda_codec::$dec_simd[wd - 1](s_ptr, o_ptr);
           s_ptr = s_ptr.offset(4 * wd as isize);
           o_ptr = o_ptr.offset(128);
         }
@@ -895,7 +895,7 @@ macro_rules! access_unsigned {
         }
 
         // Decode final block
-        Binary::<$ty>::_decode_final(s_ptr, o_ptr);
+        BitPacked::<$ty>::_decode_final(s_ptr, o_ptr);
 
         // Shift the entries into the desired range
         let sft: usize = range.start - (s_blk << 7);
@@ -913,7 +913,7 @@ macro_rules! access_unsigned {
       }
     }
 
-    impl AccessPrivate<ops::RangeFrom<usize>> for Binary<$ty> {
+    impl AccessPrivate<ops::RangeFrom<usize>> for BitPacked<$ty> {
       unsafe fn _access(storage: &[u32], range: ops::RangeFrom<usize>) -> Vec<$ty> {
         if storage.is_empty() {
           if range.start > 0 {
@@ -946,7 +946,7 @@ macro_rules! access_unsigned {
           s_ptr = s_ptr.offset(1);
 
           // Decode the block
-          pfor_codec::$dec_simd[wd - 1](s_ptr, o_ptr);
+          mayda_codec::$dec_simd[wd - 1](s_ptr, o_ptr);
           s_ptr = s_ptr.offset(4 * wd as isize);
           o_ptr = o_ptr.offset(128);
         }
@@ -964,7 +964,7 @@ macro_rules! access_unsigned {
         }
 
         // Decode final block
-        Binary::<$ty>::_decode_final(s_ptr, o_ptr);
+        BitPacked::<$ty>::_decode_final(s_ptr, o_ptr);
 
         // Shift the entries into the desired range
         let sft: usize = range.start - (s_blk << 7);
@@ -993,29 +993,29 @@ access_unsigned!{
 
 macro_rules! access_signed {
   ($(($it: ident, $ut: ident: $dec_zz: ident))*) => ($(
-    impl AccessPrivate<usize> for Binary<$it> {
+    impl AccessPrivate<usize> for BitPacked<$it> {
       unsafe fn _access(storage: &[u32], index: usize) -> $it {
-        let val: $ut = Binary::<$ut>::_access(storage, index);
+        let val: $ut = BitPacked::<$ut>::_access(storage, index);
         ((val >> 1) ^ (!(val & 1)).wrapping_add(1)) as $it
       }
     }
 
-    impl AccessPrivate<ops::Range<usize>> for Binary<$it> {
+    impl AccessPrivate<ops::Range<usize>> for BitPacked<$it> {
       unsafe fn _access(storage: &[u32], range: ops::Range<usize>) -> Vec<$it> {
-        let mut scratch: Vec<$ut> = Binary::<$ut>::_access(storage, range);
+        let mut scratch: Vec<$ut> = BitPacked::<$ut>::_access(storage, range);
         let ptr: *mut $ut = scratch.as_mut_ptr();
         let len: usize = scratch.len();
-        pfor_codec::$dec_zz(ptr, len);
+        mayda_codec::$dec_zz(ptr, len);
         mem::transmute(scratch)
       }
     }
 
-    impl AccessPrivate<ops::RangeFrom<usize>> for Binary<$it> {
+    impl AccessPrivate<ops::RangeFrom<usize>> for BitPacked<$it> {
       unsafe fn _access(storage: &[u32], range: ops::RangeFrom<usize>) -> Vec<$it> {
-        let mut scratch: Vec<$ut> = Binary::<$ut>::_access(storage, range);
+        let mut scratch: Vec<$ut> = BitPacked::<$ut>::_access(storage, range);
         let ptr: *mut $ut = scratch.as_mut_ptr();
         let len: usize = scratch.len();
-        pfor_codec::$dec_zz(ptr, len);
+        mayda_codec::$dec_zz(ptr, len);
         mem::transmute(scratch)
       }
     }

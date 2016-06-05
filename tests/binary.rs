@@ -8,11 +8,11 @@
 
 #![allow(non_snake_case)]
 
-extern crate pfor;
+extern crate mayda;
 extern crate rand;
 
-use pfor::utility::{Encodable, Access};
-use pfor::binary::Binary;
+use mayda::utility::{Encodable, Access};
+use mayda::binary::Binary;
 use rand::distributions::{IndependentSample, Range};
 
 macro_rules! constant_values {

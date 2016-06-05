@@ -1,11 +1,11 @@
 [package]
-name = "pfor"
+name = "mayda"
 version = "0.0.1"
 authors = ["Jeremy Mason <jkylemason@gmail.com>"]
 
 [lib]
-name = "pfor"
+name = "mayda"
 
 [dependencies]
-pfor_codec = { path = "pfor_codec", version = "0.0.1" }
+mayda_codec = { path = "mayda_codec", version = "0.0.1" }
 rand = "0.3"

@@ -4,20 +4,21 @@
 // http://opensource.org/licenses/MIT>. This file may not be copied, modified,
 // or distributed except according to those terms.
 
-//! Defines the `pfor::Error` type. Currently only used for the return types of
+//! Defines the `mayda::Error` type. Currently only used for the return types of
 //! functions defined in the `Encodable` trait, but intended to allow for more
 //! complex error handling in the future.
 
 use std::error;
 use std::fmt;
 
-/// The `pfor::Error` type.
+/// The `mayda::Error` type.
 #[derive(Debug)]
 pub struct Error {
   message: String
 }
 
 impl Error {
+  /// Creates an empty Error object.
   pub fn new(s: &str) -> Error {
     Error {
       message: s.to_string()

@@ -1,8 +1,8 @@
 [package]
-name = "pfor_macros"
+name = "mayda_macros"
 version = "0.0.1"
 authors = ["jkylemason"]
 
 [lib]
-name = "pfor_macros"
+name = "mayda_macros"
 plugin = true

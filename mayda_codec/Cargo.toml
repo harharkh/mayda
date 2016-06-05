@@ -1,11 +1,11 @@
 [package]
-name = "pfor_codec"
+name = "mayda_codec"
 version = "0.0.1"
 authors = ["jkylemason"]
 
 [lib]
-name = "pfor_codec"
+name = "mayda_codec"
 
 [dependencies]
-pfor_macros = { path = "../pfor_macros", version = "0.0.1" }
+mayda_macros = { path = "../mayda_macros", version = "0.0.1" }
 simd = { git = "https://github.com/huonw/simd" }

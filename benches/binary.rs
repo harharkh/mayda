@@ -9,11 +9,11 @@
 
 #![allow(non_snake_case)]
 
-extern crate pfor;
+extern crate mayda;
 extern crate test;
 
-use pfor::utility::{Access, Encodable};
-use pfor::binary::Binary;
+use mayda::utility::{Access, Encodable};
+use mayda::binary::Binary;
 use test::Bencher;
 
 macro_rules! encode_bench {

@@ -4,14 +4,16 @@
 // http://opensource.org/licenses/MIT>. This file may not be copied, modified,
 // or distributed except according to those terms.
 
-#![feature(specialization, iter_arith, inclusive_range_syntax)]
+#![feature(inclusive_range, inclusive_range_syntax)]
+#![feature(iter_arith, specialization)]
 
-extern crate pfor_codec;
+extern crate mayda_codec;
 
 //pub mod binary;
 pub mod error;
 pub mod patched;
 pub mod utility;
 
-#[doc(no_inline)]
 pub use self::error::Error;
+pub use self::utility::{Access, Encodable};
+pub use self::patched::Patched;

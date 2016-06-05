@@ -8,12 +8,31 @@
 
 #![allow(non_snake_case)]
 
-extern crate pfor;
+extern crate mayda;
 extern crate rand;
 
-use pfor::utility::{Encodable, Access};
-use pfor::patched::Patched;
+use mayda::utility::{Encodable, Access};
+use mayda::patched::Patched;
 use rand::distributions::{IndependentSample, Range};
+
+fn random_outliers<T>(min1: T, max1: T, min2: T, max2: T) -> Vec<T>
+  where T: PartialOrd + rand::distributions::range::SampleRange {
+  let length1 = 1023;
+  let length2 = 127;
+
+  let mut output: Vec<T> = Vec::new();
+  let val = Range::new(min1, max1);
+  let mut rng = rand::thread_rng();
+  for _ in 0..length1 {
+    output.push(val.ind_sample(&mut rng));
+  }
+  let idx = Range::new(0, length1);
+  let val = Range::new(min2, max2);
+  for _ in 0..length2 {
+    output[idx.ind_sample(&mut rng)] = val.ind_sample(&mut rng);
+  }
+  output
+}
 
 macro_rules! constant_values {
   ($(($t: ty: $value: expr, $length: expr, $name: ident))*) => ($(
@@ -67,7 +86,7 @@ constant_values!{
   (u8: 0, 30, cv_u8_0_30)
   (u8: 1, 31, cv_u8_1_31)
   (u8: 2, 32, cv_u8_2_32)
-  /*(i8: 0, 0, cv_i8_0_0)
+  (i8: 0, 0, cv_i8_0_0)
   (i8: 1, 1, cv_i8_1_1)
   (i8: 2, 2, cv_i8_2_2)
   (i8: 3, 3, cv_i8_3_3)
@@ -99,7 +118,7 @@ constant_values!{
   (i8: 9, 29, cv_i8_9_29)
   (i8: 0, 30, cv_i8_0_30)
   (i8: 1, 31, cv_i8_1_31)
-  (i8: 2, 32, cv_i8_2_32)*/
+  (i8: 2, 32, cv_i8_2_32)
 }
 
 constant_values!{
@@ -136,7 +155,7 @@ constant_values!{
   (u16: 0, 30, cv_u16_0_30)
   (u16: 1, 31, cv_u16_1_31)
   (u16: 2, 32, cv_u16_2_32)
-  /*(i16: 0, 0, cv_i16_0_0)
+  (i16: 0, 0, cv_i16_0_0)
   (i16: 1, 1, cv_i16_1_1)
   (i16: 2, 2, cv_i16_2_2)
   (i16: 3, 3, cv_i16_3_3)
@@ -168,7 +187,7 @@ constant_values!{
   (i16: 9, 29, cv_i16_9_29)
   (i16: 0, 30, cv_i16_0_30)
   (i16: 1, 31, cv_i16_1_31)
-  (i16: 2, 32, cv_i16_2_32)*/
+  (i16: 2, 32, cv_i16_2_32)
 }
 
 constant_values!{
@@ -205,7 +224,7 @@ constant_values!{
   (u32: 0, 30, cv_u32_0_30)
   (u32: 1, 31, cv_u32_1_31)
   (u32: 2, 32, cv_u32_2_32)
-  /*(i32: 0, 0, cv_i32_0_0)
+  (i32: 0, 0, cv_i32_0_0)
   (i32: 1, 1, cv_i32_1_1)
   (i32: 2, 2, cv_i32_2_2)
   (i32: 3, 3, cv_i32_3_3)
@@ -237,7 +256,7 @@ constant_values!{
   (i32: 9, 29, cv_i32_9_29)
   (i32: 0, 30, cv_i32_0_30)
   (i32: 1, 31, cv_i32_1_31)
-  (i32: 2, 32, cv_i32_2_32)*/
+  (i32: 2, 32, cv_i32_2_32)
 }
 
 constant_values!{
@@ -274,7 +293,7 @@ constant_values!{
   (u64: 0, 30, cv_u64_0_30)
   (u64: 1, 31, cv_u64_1_31)
   (u64: 2, 32, cv_u64_2_32)
-  /*(i64: 0, 0, cv_i64_0_0)
+  (i64: 0, 0, cv_i64_0_0)
   (i64: 1, 1, cv_i64_1_1)
   (i64: 2, 2, cv_i64_2_2)
   (i64: 3, 3, cv_i64_3_3)
@@ -306,7 +325,7 @@ constant_values!{
   (i64: 9, 29, cv_i64_9_29)
   (i64: 0, 30, cv_i64_0_30)
   (i64: 1, 31, cv_i64_1_31)
-  (i64: 2, 32, cv_i64_2_32)*/
+  (i64: 2, 32, cv_i64_2_32)
 }
 
 constant_values!{
@@ -338,7 +357,14 @@ constant_values!{
   (u64: 127, 512, cv_u64_127_512)
   (u64: 128, 513, cv_u64_128_513)
   (u64: std::u64::MAX, 256, cv_u64_MAX_256)
-  /*(i8: 31, 127, cv_i8_31_127)
+  (usize: 31, 127, cv_usize_31_127)
+  (usize: 32, 128, cv_usize_32_128)
+  (usize: 63, 129, cv_usize_63_129)
+  (usize: 64, 511, cv_usize_64_511)
+  (usize: 127, 512, cv_usize_127_512)
+  (usize: 128, 513, cv_usize_128_513)
+  (usize: std::usize::MAX, 256, cv_usize_MAX_256)
+  (i8: 31, 127, cv_i8_31_127)
   (i8: 32, 128, cv_i8_32_128)
   (i8: 63, 129, cv_i8_63_129)
   (i8: 64, 511, cv_i8_64_511)
@@ -365,7 +391,14 @@ constant_values!{
   (i64: 64, 511, cv_i64_64_511)
   (i64: 127, 512, cv_i64_127_512)
   (i64: 128, 513, cv_i64_128_513)
-  (i64: std::i64::MAX, 256, cv_i64_MAX_256)*/
+  (i64: std::i64::MAX, 256, cv_i64_MAX_256)
+  (isize: 31, 127, cv_isize_31_127)
+  (isize: 32, 128, cv_isize_32_128)
+  (isize: 63, 129, cv_isize_63_129)
+  (isize: 64, 511, cv_isize_64_511)
+  (isize: 127, 512, cv_isize_127_512)
+  (isize: 128, 513, cv_isize_128_513)
+  (isize: std::isize::MAX, 256, cv_isize_MAX_256)
 }
 
 macro_rules! random_values {
@@ -374,10 +407,10 @@ macro_rules! random_values {
     fn $name() {
       let mut bin = Patched::new();
       let mut input: Vec<$t> = Vec::new();
-      let between = Range::new($min, $max);
+      let range = Range::new($min, $max);
       let mut rng = rand::thread_rng();
       for _ in 0..$length {
-        input.push(between.ind_sample(&mut rng));
+        input.push(range.ind_sample(&mut rng));
       }
       bin.encode(&input).unwrap();
       let output = bin.decode().unwrap();
@@ -396,10 +429,46 @@ random_values!{
   (u16: 0, std::u16::MAX, 1024, rv_u16_0_MAX_1024)
   (u32: 0, std::u32::MAX, 1024, rv_u32_0_MAX_1024)
   (u64: 0, std::u64::MAX, 1024, rv_u64_0_MAX_1024)
-  /*(i8: 0, std::i8::MAX, 1024, rv_i8_0_MAX_1024)
-  (i16: 0, std::i16::MAX, 1024, rv_i16_0_MAX_1024)
-  (i32: 0, std::i32::MAX, 1024, rv_i32_0_MAX_1024)
-  (i64: 0, std::i64::MAX, 1024, rv_i64_0_MAX_1024)*/
+  (usize: 0, std::usize::MAX, 1024, rv_usize_0_MAX_1024)
+  (i8: std::i8::MIN, std::i8::MAX, 1024, rv_i8_MIN_MAX_1024)
+  (i16: std::i16::MIN, std::i16::MAX, 1024, rv_i16_MIN_MAX_1024)
+  (i32: std::i32::MIN, std::i32::MAX, 1024, rv_i32_MIN_MAX_1024)
+  (i64: std::i64::MIN, std::i64::MAX, 1024, rv_i64_MIN_MAX_1024)
+  (isize: std::isize::MIN, std::isize::MAX, 1024, rv_isize_MIN_MAX_1024)
+}
+
+macro_rules! random_outliers {
+  ($(($t: ty:
+      $min1: expr, $max1: expr,
+      $min2: expr, $max2: expr,
+      $name: ident))*) => ($(
+    #[test]
+    fn $name() {
+      let mut bin = Patched::new();
+      let input: Vec<$t> = random_outliers($min1, $max1, $min2, $max2);
+      bin.encode(&input).unwrap();
+      let output = bin.decode().unwrap();
+      println!("{:?}", input);
+      for a in bin.storage() {
+        println!("{:032b}", a);
+      }
+      println!("{:?}", output);
+      assert_eq!(input, output);
+    }
+  )*)
+}
+
+random_outliers!{
+  (u8: 0, 16, 16, std::u8::MAX, ro_u8_1023_127)
+  (u16: 0, 32, 32, std::u16::MAX, ro_u16_1023_127)
+  (u32: 0, 64, 64, std::u32::MAX, ro_u32_1023_127)
+  (u64: 0, 128, 128, std::u64::MAX, ro_u64_1023_127)
+  (usize: 0, 128, 128, std::usize::MAX, ro_usize_1023_127)
+  (i8: -16, 16, std::i8::MIN, std::i8::MAX, ro_i8_1023_127)
+  (i16: -32, 32, std::i16::MIN, std::i16::MAX, ro_i16_1023_127)
+  (i32: -64, 64, std::i32::MIN, std::i32::MAX, ro_i32_1023_127)
+  (i64: -128, 128, std::i64::MIN, std::i64::MAX, ro_i64_1023_127)
+  (isize: -128, 128, std::isize::MIN, std::isize::MAX, ro_isize_1023_127)
 }
 
 macro_rules! increasing_values {
@@ -425,12 +494,14 @@ increasing_values!{
   (u16: 0, 1027, iv_u16_0_1023)
   (u32: 0, 1023, iv_u32_0_1023)
   (u64: 0, 1023, iv_u64_0_1023)
-  /*(i8: -128, 127, iv_i8_128_127)
+  (usize: 0, 1023, iv_usize_0_1023)
+  (i8: -128, 127, iv_i8_128_127)
   (i16: -512, 511, iv_i16_512_511)
   (i32: -512, 511, iv_i32_512_511)
-  (i64: -512, 511, iv_i64_512_511)*/
+  (i64: -512, 511, iv_i64_512_511)
+  (isize: -512, 511, iv_isize_512_511)
 }
-/*
+
 macro_rules! indexing {
   ($(($t: ty: $max: expr, $name: ident))*) => ($(
     #[test]
@@ -456,10 +527,12 @@ indexing!{
   (u16: 1023, idx_u16_1023)
   (u32: 1023, idx_u32_1023)
   (u64: 1023, idx_u64_1023)
+  (usize: 1023, idx_usize_1023)
   (i8: 127, idx_i8_127)
   (i16: 1023, idx_i16_1023)
   (i32: 1023, idx_i32_1023)
   (i64: 1023, idx_i64_1023)
+  (isize: 1023, idx_isize_1023)
 }
 
 macro_rules! indexing_panic {
@@ -507,17 +580,20 @@ indexing_panic!{
 }
 
 macro_rules! range {
-  ($(($t: ty: $max: expr, $width: expr, $name: ident))*) => ($(
+  ($(($t: ty: $width: expr,
+      $min1: expr, $max1: expr,
+      $min2: expr, $max2: expr,
+      $name: ident))*) => ($(
     #[test]
     fn $name() {
       let mut bin = Patched::new();
-      let input: Vec<$t> = (0..$max).collect();
+      let input: Vec<$t> = random_outliers($min1, $max1, $min2, $max2);
       bin.encode(&input).unwrap();
       println!("{:?}", input);
       for a in bin.storage() {
         println!("{:032b}", a);
       }
-      for a in 0..($max - $width) {
+      for a in 0..(1023 - $width) {
         let vec = bin.access(a..($width + a));
         println!("{:?} {:?}", &input[a..($width + a)], &vec[..]);
         assert_eq!(&input[a..($width + a)], &vec[..]);
@@ -527,14 +603,16 @@ macro_rules! range {
 }
 
 range!{
-  (u8: 255, 16, r_u8_255_16)
-  (u16: 1023, 16, r_u16_1023_16)
-  (u32: 1023, 16, r_u32_1023_16)
-  (u64: 1023, 16, r_u64_1023_16)
-  (i8: 127, 16, r_i8_127_16)
-  (i16: 1023, 16, r_i16_1023_16)
-  (i32: 1023, 16, r_i32_1023_16)
-  (i64: 1023, 16, r_i64_1023_16)
+  (u8: 15, 0, 16, 16, std::u8::MAX, r_u8_1023_127)
+  (u16: 15, 0, 32, 32, std::u16::MAX, r_u16_1023_127)
+  (u32: 15, 0, 64, 64, std::u32::MAX, r_u32_1023_127)
+  (u64: 15, 0, 128, 128, std::u64::MAX, r_u64_1023_127)
+  (usize: 15, 0, 128, 128, std::usize::MAX, r_usize_1023_127)
+  (i8: 15, -16, 16, std::i8::MIN, std::i8::MAX, r_i8_1023_127)
+  (i16: 15, -32, 32, std::i16::MIN, std::i16::MAX, r_i16_1023_127)
+  (i32: 15, -64, 64, std::i32::MIN, std::i32::MAX, r_i32_1023_127)
+  (i64: 15, -128, 128, std::i64::MIN, std::i64::MAX, r_i64_1023_127)
+  (isize: 15, -128, 128, std::isize::MIN, std::isize::MAX, r_isize_1023_127)
 }
 
 macro_rules! range_panic {
@@ -614,17 +692,20 @@ range_panic!{
 }
 
 macro_rules! range_to {
-  ($(($t: ty: $max: expr, $name: ident))*) => ($(
+  ($(($t: ty:
+      $min1: expr, $max1: expr,
+      $min2: expr, $max2: expr,
+      $name: ident))*) => ($(
     #[test]
     fn $name() {
       let mut bin = Patched::new();
-      let input: Vec<$t> = (0..$max).collect();
+      let input: Vec<$t> = random_outliers($min1, $max1, $min2, $max2);
       bin.encode(&input).unwrap();
       println!("{:?}", input);
       for a in bin.storage() {
         println!("{:032b}", a);
       }
-      for a in 0..$max {
+      for a in 0..1023 {
         let vec = bin.access(..a);
         println!("{:?} {:?}", &input[..a], &vec[..]);
         assert_eq!(&input[..a], &vec[..]);
@@ -634,28 +715,33 @@ macro_rules! range_to {
 }
 
 range_to!{
-  (u8: 255, rt_u8_255)
-  (u16: 255, rt_u16_255)
-  (u32: 255, rt_u32_255)
-  (u64: 255, rt_u64_255)
-  (i8: 127, rt_i8_127)
-  (i16: 255, rt_i16_255)
-  (i32: 255, rt_i32_255)
-  (i64: 255, rt_i64_255)
+  (u8: 0, 16, 16, std::u8::MAX, rt_u8_1023_127)
+  (u16: 0, 32, 32, std::u16::MAX, rt_u16_1023_127)
+  (u32: 0, 64, 64, std::u32::MAX, rt_u32_1023_127)
+  (u64: 0, 128, 128, std::u64::MAX, rt_u64_1023_127)
+  (usize: 0, 128, 128, std::usize::MAX, rt_usize_1023_127)
+  (i8: -16, 16, std::i8::MIN, std::i8::MAX, rt_i8_1023_127)
+  (i16: -32, 32, std::i16::MIN, std::i16::MAX, rt_i16_1023_127)
+  (i32: -64, 64, std::i32::MIN, std::i32::MAX, rt_i32_1023_127)
+  (i64: -128, 128, std::i64::MIN, std::i64::MAX, rt_i64_1023_127)
+  (isize: -128, 128, std::isize::MIN, std::isize::MAX, rt_isize_1023_127)
 }
 
 macro_rules! range_from {
-  ($(($t: ty: $max: expr, $name: ident))*) => ($(
+  ($(($t: ty:
+      $min1: expr, $max1: expr,
+      $min2: expr, $max2: expr,
+      $name: ident))*) => ($(
     #[test]
     fn $name() {
       let mut bin = Patched::new();
-      let input: Vec<$t> = (0..$max).collect();
+      let input: Vec<$t> = random_outliers($min1, $max1, $min2, $max2);
       bin.encode(&input).unwrap();
       println!("{:?}", input);
       for a in bin.storage() {
         println!("{:032b}", a);
       }
-      for a in 0...$max {
+      for a in 0...1023 {
         let vec = bin.access(a..);
         println!("{:?} {:?}", &input[a..], &vec[..]);
         assert_eq!(&input[a..], &vec[..]);
@@ -665,22 +751,27 @@ macro_rules! range_from {
 }
 
 range_from!{
-  (u8: 255, rf_u8_255)
-  (u16: 255, rf_u16_255)
-  (u32: 255, rf_u32_255)
-  (u64: 255, rf_u64_255)
-  (i8: 127, rf_i8_127)
-  (i16: 255, rf_i16_255)
-  (i32: 255, rf_i32_255)
-  (i64: 255, rf_i64_255)
+  (u8: 0, 16, 16, std::u8::MAX, rf_u8_1023_127)
+  (u16: 0, 32, 32, std::u16::MAX, rf_u16_1023_127)
+  (u32: 0, 64, 64, std::u32::MAX, rf_u32_1023_127)
+  (u64: 0, 128, 128, std::u64::MAX, rf_u64_1023_127)
+  (usize: 0, 128, 128, std::usize::MAX, rf_usize_1023_127)
+  (i8: -16, 16, std::i8::MIN, std::i8::MAX, rf_i8_1023_127)
+  (i16: -32, 32, std::i16::MIN, std::i16::MAX, rf_i16_1023_127)
+  (i32: -64, 64, std::i32::MIN, std::i32::MAX, rf_i32_1023_127)
+  (i64: -128, 128, std::i64::MIN, std::i64::MAX, rf_i64_1023_127)
+  (isize: -128, 128, std::isize::MIN, std::isize::MAX, rf_isize_1023_127)
 }
 
 macro_rules! range_full {
-  ($(($t: ty: $max: expr, $name: ident))*) => ($(
+  ($(($t: ty:
+      $min1: expr, $max1: expr,
+      $min2: expr, $max2: expr,
+      $name: ident))*) => ($(
     #[test]
     fn $name() {
       let mut bin = Patched::new();
-      let input: Vec<$t> = (0..$max).collect();
+      let input: Vec<$t> = random_outliers($min1, $max1, $min2, $max2);
       bin.encode(&input).unwrap();
       let output = bin.access(..);
       println!("{:?}", input);
@@ -694,12 +785,50 @@ macro_rules! range_full {
 }
 
 range_full!{
-  (u8: 255, ru_u8_255)
-  (u16: 255, ru_u16_255)
-  (u32: 255, ru_u32_255)
-  (u64: 255, ru_u64_255)
-  (i8: 127, ru_i8_127)
-  (i16: 255, ru_i16_255)
-  (i32: 255, ru_i32_255)
-  (i64: 255, ru_i64_255)
-}*/
+  (u8: 0, 16, 16, std::u8::MAX, ru_u8_1023_127)
+  (u16: 0, 32, 32, std::u16::MAX, ru_u16_1023_127)
+  (u32: 0, 64, 64, std::u32::MAX, ru_u32_1023_127)
+  (u64: 0, 128, 128, std::u64::MAX, ru_u64_1023_127)
+  (usize: 0, 128, 128, std::usize::MAX, ru_usize_1023_127)
+  (i8: -16, 16, std::i8::MIN, std::i8::MAX, ru_i8_1023_127)
+  (i16: -32, 32, std::i16::MIN, std::i16::MAX, ru_i16_1023_127)
+  (i32: -64, 64, std::i32::MIN, std::i32::MAX, ru_i32_1023_127)
+  (i64: -128, 128, std::i64::MIN, std::i64::MAX, ru_i64_1023_127)
+  (isize: -128, 128, std::isize::MIN, std::isize::MAX, ru_isize_1023_127)
+}
+
+macro_rules! range_inclusive {
+  ($(($t: ty: $width: expr,
+      $min1: expr, $max1: expr,
+      $min2: expr, $max2: expr,
+      $name: ident))*) => ($(
+    #[test]
+    fn $name() {
+      let mut bin = Patched::new();
+      let input: Vec<$t> = random_outliers($min1, $max1, $min2, $max2);
+      bin.encode(&input).unwrap();
+      println!("{:?}", input);
+      for a in bin.storage() {
+        println!("{:032b}", a);
+      }
+      for a in 0..(1022 - $width) {
+        let vec = bin.access(a...($width + a));
+        println!("{:?} {:?}", &input[a...($width + a)], &vec[..]);
+        assert_eq!(&input[a...($width + a)], &vec[..]);
+      }
+    }
+  )*)
+}
+
+range_inclusive!{
+  (u8: 15, 0, 16, 16, std::u8::MAX, ri_u8_1023_127)
+  (u16: 15, 0, 32, 32, std::u16::MAX, ri_u16_1023_127)
+  (u32: 15, 0, 64, 64, std::u32::MAX, ri_u32_1023_127)
+  (u64: 15, 0, 128, 128, std::u64::MAX, ri_u64_1023_127)
+  (usize: 15, 0, 128, 128, std::usize::MAX, ri_usize_1023_127)
+  (i8: 15, -16, 16, std::i8::MIN, std::i8::MAX, ri_i8_1023_127)
+  (i16: 15, -32, 32, std::i16::MIN, std::i16::MAX, ri_i16_1023_127)
+  (i32: 15, -64, 64, std::i32::MIN, std::i32::MAX, ri_i32_1023_127)
+  (i64: 15, -128, 128, std::i64::MIN, std::i64::MAX, ri_i64_1023_127)
+  (isize: 15, -128, 128, std::isize::MIN, std::isize::MAX, ri_isize_1023_127)
+}
