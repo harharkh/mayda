@@ -12,14 +12,14 @@ extern crate mayda;
 extern crate rand;
 
 use mayda::utility::{Encodable, Access};
-use mayda::binary::Binary;
+use mayda::bit_packed::BitPacked;
 use rand::distributions::{IndependentSample, Range};
 
 macro_rules! constant_values {
   ($(($t: ty: $value: expr, $length: expr, $name: ident))*) => ($(
     #[test]
     fn $name() {
-      let mut bin = Binary::new();
+      let mut bin = BitPacked::new();
       let input: Vec<$t> = vec![$value; $length];
       bin.encode(&input).unwrap();
       let output = bin.decode().unwrap();
@@ -338,6 +338,13 @@ constant_values!{
   (u64: 127, 512, cv_u64_127_512)
   (u64: 128, 513, cv_u64_128_513)
   (u64: std::u64::MAX, 256, cv_u64_MAX_256)
+  (usize: 31, 127, cv_usize_31_127)
+  (usize: 32, 128, cv_usize_32_128)
+  (usize: 63, 129, cv_usize_63_129)
+  (usize: 64, 511, cv_usize_64_511)
+  (usize: 127, 512, cv_usize_127_512)
+  (usize: 128, 513, cv_usize_128_513)
+  (usize: std::usize::MAX, 256, cv_usize_MAX_256)
   (i8: 31, 127, cv_i8_31_127)
   (i8: 32, 128, cv_i8_32_128)
   (i8: 63, 129, cv_i8_63_129)
@@ -366,13 +373,20 @@ constant_values!{
   (i64: 127, 512, cv_i64_127_512)
   (i64: 128, 513, cv_i64_128_513)
   (i64: std::i64::MAX, 256, cv_i64_MAX_256)
+  (isize: 31, 127, cv_isize_31_127)
+  (isize: 32, 128, cv_isize_32_128)
+  (isize: 63, 129, cv_isize_63_129)
+  (isize: 64, 511, cv_isize_64_511)
+  (isize: 127, 512, cv_isize_127_512)
+  (isize: 128, 513, cv_isize_128_513)
+  (isize: std::isize::MAX, 256, cv_isize_MAX_256)
 }
 
 macro_rules! random_values {
   ($(($t: ty: $min: expr, $max: expr, $length: expr, $name: ident))*) => ($(
     #[test]
     fn $name() {
-      let mut bin = Binary::new();
+      let mut bin = BitPacked::new();
       let mut input: Vec<$t> = Vec::new();
       let between = Range::new($min, $max);
       let mut rng = rand::thread_rng();
@@ -396,17 +410,19 @@ random_values!{
   (u16: 0, std::u16::MAX, 1024, rv_u16_0_MAX_1024)
   (u32: 0, std::u32::MAX, 1024, rv_u32_0_MAX_1024)
   (u64: 0, std::u64::MAX, 1024, rv_u64_0_MAX_1024)
+  (usize: 0, std::usize::MAX, 1024, rv_usize_0_MAX_1024)
   (i8: 0, std::i8::MAX, 1024, rv_i8_0_MAX_1024)
   (i16: 0, std::i16::MAX, 1024, rv_i16_0_MAX_1024)
   (i32: 0, std::i32::MAX, 1024, rv_i32_0_MAX_1024)
   (i64: 0, std::i64::MAX, 1024, rv_i64_0_MAX_1024)
+  (isize: std::isize::MIN, std::isize::MAX, 1024, rv_isize_MIN_MAX_1024)
 }
 
 macro_rules! increasing_values {
   ($(($t: ty: $min: expr, $max: expr, $name: ident))*) => ($(
     #[test]
     fn $name() {
-      let mut bin = Binary::new();
+      let mut bin = BitPacked::new();
       let input: Vec<$t> = ($min..$max).collect();
       bin.encode(&input).unwrap();
       let output = bin.decode().unwrap();
@@ -425,17 +441,19 @@ increasing_values!{
   (u16: 0, 1023, iv_u16_0_1023)
   (u32: 0, 1023, iv_u32_0_1023)
   (u64: 0, 1023, iv_u64_0_1023)
+  (usize: 0, 1023, iv_usize_0_1023)
   (i8: -128, 127, iv_i8_128_127)
   (i16: -512, 511, iv_i16_512_511)
   (i32: -512, 511, iv_i32_512_511)
   (i64: -512, 511, iv_i64_512_511)
+  (isize: -512, 511, iv_isize_512_511)
 }
 
 macro_rules! indexing {
   ($(($t: ty: $max: expr, $name: ident))*) => ($(
     #[test]
     fn $name() {
-      let mut bin = Binary::new();
+      let mut bin = BitPacked::new();
       let input: Vec<$t> = (0..$max).collect();
       bin.encode(&input).unwrap();
       println!("{:?}", input);
@@ -456,10 +474,12 @@ indexing!{
   (u16: 1023, idx_u16_1023)
   (u32: 1023, idx_u32_1023)
   (u64: 1023, idx_u64_1023)
+  (usize: 1023, idx_usize_1023)
   (i8: 127, idx_i8_127)
   (i16: 1023, idx_i16_1023)
   (i32: 1023, idx_i32_1023)
   (i64: 1023, idx_i64_1023)
+  (isize: 1023, idx_isize_1023)
 }
 
 macro_rules! indexing_panic {
@@ -467,7 +487,7 @@ macro_rules! indexing_panic {
     #[test]
     #[should_panic]
     fn $name() {
-      let mut bin = Binary::new();
+      let mut bin = BitPacked::new();
       let input: Vec<$t> = vec![0; $length];
       bin.encode(&input).unwrap();
       println!("{:?}", input);
@@ -510,7 +530,7 @@ macro_rules! range {
   ($(($t: ty: $max: expr, $width: expr, $name: ident))*) => ($(
     #[test]
     fn $name() {
-      let mut bin = Binary::new();
+      let mut bin = BitPacked::new();
       let input: Vec<$t> = (0..$max).collect();
       bin.encode(&input).unwrap();
       println!("{:?}", input);
@@ -527,14 +547,16 @@ macro_rules! range {
 }
 
 range!{
-  (u8: 255, 16, r_u8_255_16)
-  (u16: 1023, 16, r_u16_1023_16)
-  (u32: 1023, 16, r_u32_1023_16)
-  (u64: 1023, 16, r_u64_1023_16)
-  (i8: 127, 16, r_i8_127_16)
-  (i16: 1023, 16, r_i16_1023_16)
-  (i32: 1023, 16, r_i32_1023_16)
-  (i64: 1023, 16, r_i64_1023_16)
+  (u8: 255, 15, r_u8_255_15)
+  (u16: 1023, 15, r_u16_1023_15)
+  (u32: 1023, 15, r_u32_1023_15)
+  (u64: 1023, 15, r_u64_1023_15)
+  (usize: 1023, 15, r_usize_1023_15)
+  (i8: 127, 15, r_i8_127_15)
+  (i16: 1023, 15, r_i16_1023_15)
+  (i32: 1023, 15, r_i32_1023_15)
+  (i64: 1023, 15, r_i64_1023_15)
+  (isize: 1023, 15, r_isize_1023_15)
 }
 
 macro_rules! range_panic {
@@ -542,7 +564,7 @@ macro_rules! range_panic {
     #[test]
     #[should_panic]
     fn $name() {
-      let mut bin = Binary::new();
+      let mut bin = BitPacked::new();
       let input: Vec<$t> = vec![0; $length];
       bin.encode(&input).unwrap();
       println!("{:?}", input);
@@ -617,7 +639,7 @@ macro_rules! range_to {
   ($(($t: ty: $max: expr, $name: ident))*) => ($(
     #[test]
     fn $name() {
-      let mut bin = Binary::new();
+      let mut bin = BitPacked::new();
       let input: Vec<$t> = (0..$max).collect();
       bin.encode(&input).unwrap();
       println!("{:?}", input);
@@ -638,17 +660,19 @@ range_to!{
   (u16: 255, rt_u16_255)
   (u32: 255, rt_u32_255)
   (u64: 255, rt_u64_255)
+  (usize: 255, rt_usize_255)
   (i8: 127, rt_i8_127)
   (i16: 255, rt_i16_255)
   (i32: 255, rt_i32_255)
   (i64: 255, rt_i64_255)
+  (isize: 255, rt_isize_255)
 }
 
 macro_rules! range_from {
   ($(($t: ty: $max: expr, $name: ident))*) => ($(
     #[test]
     fn $name() {
-      let mut bin = Binary::new();
+      let mut bin = BitPacked::new();
       let input: Vec<$t> = (0..$max).collect();
       bin.encode(&input).unwrap();
       println!("{:?}", input);
@@ -669,17 +693,19 @@ range_from!{
   (u16: 255, rf_u16_255)
   (u32: 255, rf_u32_255)
   (u64: 255, rf_u64_255)
+  (usize: 255, rf_usize_255)
   (i8: 127, rf_i8_127)
   (i16: 255, rf_i16_255)
   (i32: 255, rf_i32_255)
   (i64: 255, rf_i64_255)
+  (isize: 255, rf_isize_255)
 }
 
 macro_rules! range_full {
   ($(($t: ty: $max: expr, $name: ident))*) => ($(
     #[test]
     fn $name() {
-      let mut bin = Binary::new();
+      let mut bin = BitPacked::new();
       let input: Vec<$t> = (0..$max).collect();
       bin.encode(&input).unwrap();
       let output = bin.access(..);
@@ -698,8 +724,43 @@ range_full!{
   (u16: 255, ru_u16_255)
   (u32: 255, ru_u32_255)
   (u64: 255, ru_u64_255)
+  (usize: 255, ru_usize_255)
   (i8: 127, ru_i8_127)
   (i16: 255, ru_i16_255)
   (i32: 255, ru_i32_255)
   (i64: 255, ru_i64_255)
+  (isize: 255, ru_isize_255)
+}
+
+macro_rules! range_inclusive {
+  ($(($t: ty: $max: expr, $width: expr, $name: ident))*) => ($(
+    #[test]
+    fn $name() {
+      let mut bin = BitPacked::new();
+      let input: Vec<$t> = (0..$max).collect();
+      bin.encode(&input).unwrap();
+      println!("{:?}", input);
+      for a in bin.storage() {
+        println!("{:032b}", a);
+      }
+      for a in 0..($max - $width - 1) {
+        let vec = bin.access(a...($width + a));
+        println!("{:?} {:?}", &input[a...($width + a)], &vec[..]);
+        assert_eq!(&input[a...($width + a)], &vec[..]);
+      }
+    }
+  )*)
+}
+
+range_inclusive!{
+  (u8: 255, 15, ri_u8_255_15)
+  (u16: 1023, 15, ri_u16_1023_15)
+  (u32: 1023, 15, ri_u32_1023_15)
+  (u64: 1023, 15, ri_u64_1023_15)
+  (usize: 1023, 15, ri_usize_1023_15)
+  (i8: 127, 15, ri_i8_127_15)
+  (i16: 1023, 15, ri_i16_1023_15)
+  (i32: 1023, 15, ri_i32_1023_15)
+  (i64: 1023, 15, ri_i64_1023_15)
+  (isize: 1023, 15, ri_isize_1023_15)
 }

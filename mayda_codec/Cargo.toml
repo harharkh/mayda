@@ -1,11 +1,11 @@
 [package]
 name = "mayda_codec"
-version = "0.0.1"
+version = "0.1.0"
 authors = ["jkylemason"]
 
 [lib]
 name = "mayda_codec"
 
 [dependencies]
-mayda_macros = { path = "../mayda_macros", version = "0.0.1" }
+mayda_macros = { path = "../mayda_macros", version = "0.1.0" }
 simd = { git = "https://github.com/huonw/simd" }

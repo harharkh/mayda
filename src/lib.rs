@@ -9,11 +9,12 @@
 
 extern crate mayda_codec;
 
-//pub mod binary;
+pub mod bit_packed;
 pub mod error;
 pub mod patched;
 pub mod utility;
 
+pub use self::bit_packed::BitPacked;
 pub use self::error::Error;
-pub use self::utility::{Access, Encodable};
 pub use self::patched::Patched;
+pub use self::utility::{Access, Encodable};

@@ -13,14 +13,14 @@ extern crate mayda;
 extern crate test;
 
 use mayda::utility::{Access, Encodable};
-use mayda::binary::Binary;
+use mayda::bit_packed::BitPacked;
 use test::Bencher;
 
 macro_rules! encode_bench {
   ($(($t: ty: $value: expr, $length: expr, $name: ident))*) => ($(
     #[bench]
     fn $name(b: &mut Bencher) {
-      let mut bin = Binary::new();
+      let mut bin = BitPacked::new();
       let input: Vec<$t> = vec![$value; $length];
       b.iter(|| {
         bin.encode(&input).unwrap();
@@ -60,7 +60,7 @@ macro_rules! decode_bench {
   ($(($t: ty: $value: expr, $length: expr, $name: ident))*) => ($(
     #[bench]
     fn $name(b: &mut Bencher) {
-      let mut bin = Binary::new();
+      let mut bin = BitPacked::new();
       let input: Vec<$t> = vec![$value; $length];
       bin.encode(&input).unwrap();
       let mut output = Vec::new();
@@ -101,7 +101,7 @@ macro_rules! indexing_bench {
   ($(($t: ty: $max: expr, $idx: expr, $name: ident))*) => ($(
     #[bench]
     fn $name(b: &mut Bencher) {
-      let mut bin = Binary::new();
+      let mut bin = BitPacked::new();
       let input: Vec<$t> = (0...$max).collect();
       bin.encode(&input).unwrap();
       let mut v: $t = 0;
@@ -128,7 +128,7 @@ macro_rules! range_bench {
   ($(($t: ty: $max: expr, $idx: expr, $name: ident))*) => ($(
     #[bench]
     fn $name(b: &mut Bencher) {
-      let mut bin = Binary::new();
+      let mut bin = BitPacked::new();
       let input: Vec<$t> = (0...$max).collect();
       bin.encode(&input).unwrap();
       let mut vec: Vec<$t> = Vec::new();

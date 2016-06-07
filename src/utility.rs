@@ -104,7 +104,7 @@ pub trait Access<Idx> {
 /// ```
 /// use std::mem;
 /// use mayda::utility::words_for_bits;
-/// let words = words_for_bits(13 * (mem::size_of::<u8>() * 8));
+/// let words = words_for_bits(13 * (mem::size_of::<u8>() * 8) as u32);
 /// assert_eq!(4, words);
 /// ```
 #[inline]
