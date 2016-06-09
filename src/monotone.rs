@@ -4,33 +4,30 @@
 // http://opensource.org/licenses/MIT>. This file may not be copied, modified,
 // or distributed except according to those terms.
 
-//! `BitPacked` encoding of integer arrays. Intended for cases where encoding
-//! and decoding speed is desired, or the probability distribution of the
-//! entries is uniform within certain bounds. Implemented for all primitive
-//! integer types.
+//! `Monotone` encoding of integer arrays. Intended for cases where the entries
+//! are monotonically increasing. Implemented for all primitive integer types.
 //!
-//! Significantly faster than the `Patched` encoding, but compression decays
-//! with the magnitude of the difference between the largest and smallest
-//! entries.
+//! Faster than `Unimodal`, but slower than `Uniform`. Compression decays with
+//! the maximum magnitude of the difference of successive entries.
 //!
 //! # Examples
 //!
 //! ```
 //! use mayda::utility::{Access, Encodable};
-//! use mayda::bit_packed::BitPacked;
+//! use mayda::monotone::Monotone;
 //!
-//! let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
-//! let mut bits = BitPacked::new();
-//! bits.encode(&input).unwrap();
+//! let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
+//! let mut bits = Monotone::new();
+//! bits.encode(&input);
 //!
 //! let output = bits.decode().unwrap();
 //! assert_eq!(input, output);
 //!
 //! let value = bits.access(4);
-//! assert_eq!(value, 5);
+//! assert_eq!(value, 20);
 //!
 //! let range = bits.access(1..4);
-//! assert_eq!(range, vec![4, 2, 8]); 
+//! assert_eq!(range, vec![5, 7, 15]); 
 //! ```
 
 use std::marker::PhantomData;
@@ -42,7 +39,7 @@ use utility::{self, Bits, Encodable, Access};
 const E_WIDTH: u32 = 0x0000007f;
 const E_COUNT: u32 = 0x00007f80;
 
-/// The type of a bit packed encoded integer array. Designed for moderate
+/// The type of a monotone encoded integer array. Designed for moderate
 /// compression and efficient decoding through the `Encodable` trait, and
 /// efficient random access through the `Access` trait.
 ///
@@ -54,26 +51,26 @@ const E_COUNT: u32 = 0x00007f80;
 ///
 /// ```
 /// use mayda::utility::{Access, Encodable};
-/// use mayda::bit_packed::BitPacked;
+/// use mayda::monotone::Monotone;
 ///
-/// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
-/// let mut bits = BitPacked::new();
-/// bits.encode(&input).unwrap();
+/// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
+/// let mut bits = Monotone::new();
+/// bits.encode(&input);
 ///
 /// let output = bits.decode().unwrap();
 /// assert_eq!(input, output);
 ///
 /// let value = bits.access(4);
-/// assert_eq!(value, 5);
+/// assert_eq!(value, 20);
 ///
 /// let range = bits.access(1..4);
-/// assert_eq!(range, vec![4, 2, 8]); 
+/// assert_eq!(range, vec![5, 7, 15]); 
 /// ```
 ///
 /// # Indexing
 ///
-/// Indexing a `BitPacked` object is not a simple pointer offset. The header of
-/// a `BitPacked` object effectively encodes the relative offsets to every
+/// Indexing a `Monotone` object is not a simple pointer offset. The header of
+/// a `Monotone` object effectively encodes the relative offsets to every
 /// block, with the result that random access via the `Access` trait is an
 /// `O(log(idx))` operation, where `idx` is the value of the index (not the
 /// length of the array). The overhead of the header is around a tenth of a bit
@@ -85,19 +82,19 @@ const E_COUNT: u32 = 0x00007f80;
 /// # Performance
 ///
 /// Decoding does not allocate except for the return value, and decodes around
-/// 15 GiB/s of decoded integers. Encoding allocates `O(n)` memory (`n` in the
+/// 8 GiB/s of decoded integers. Encoding allocates `O(n)` memory (`n` in the
 /// length of the array), and encodes around 5 GiB/s of decoded integers.
-/// Run `cargo bench --bench bit_packed` for performance numbers on your setup.
+/// Run `cargo bench --bench monotone` for performance numbers on your setup.
 ///
 /// The performance (speed and compression) degrades gradually as the number of
 /// entries falls below 128.
 ///
 /// # Safety
 ///
-/// As a general rule, DO NOT decode or access `BitPacked` objects from
+/// As a general rule, DO NOT decode or access `Monotone` objects from
 /// untrusted sources.
 ///
-/// A `BitPacked` object performs unsafe pointer operations during encoding and
+/// A `Monotone` object performs unsafe pointer operations during encoding and
 /// decoding. Changing the header information with `mut_storage()` can cause
 /// data to be written to or read from arbitrary addresses in memory.
 ///
@@ -113,29 +110,29 @@ const E_COUNT: u32 = 0x00007f80;
 /// all of the entries in a block with a single minimum necessary bit width. 
 /// This allows SIMD operations to be used to accelerate encoding and decoding.
 ///
-/// While this approach does not perform well for probability distributions
-/// with outliers, the `BitPacked` encoding does not try to address this and
-/// instead targets encoding and decoding speed. The only transformation is to
-/// subtract the minimum value from the entries, with the result that the
-/// compression depends only on the difference between the largest and smallest
-/// entries.
+/// The `Monotone` encoding is specifically intended for arrays with monotone
+/// increasing entries. A blocks of entries is transformed into an offset and
+/// an array of differences of successive entries, and the array of differences
+/// is encoded by the approach above. The compression depends only on the 
+/// largest entry in the difference array, but should generally be better than 
+/// for either the `Uniform` or `Unimodal` encodings.
 #[derive(Clone, Debug, Default, Hash, PartialEq, PartialOrd)]
-pub struct BitPacked<B> {
+pub struct Monotone<B> {
   storage: Box<[u32]>,
   phantom: PhantomData<B>
 }
 
-impl<B: Bits> BitPacked<B> {
-  /// Creates an empty `BitPacked` object.
+impl<B: Bits> Monotone<B> {
+  /// Creates an empty `Monotone` object.
   ///
   /// # Examples
   /// ```
   /// use std::mem;
-  /// use mayda::{Encodable, BitPacked};
+  /// use mayda::{Encodable, Monotone};
   ///
-  /// let mut bits = BitPacked::new();
+  /// let mut bits = Monotone::new();
   ///
-  /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
+  /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
   /// bits.encode(&input);
   ///
   /// let bytes = mem::size_of_val(&bits);
@@ -143,9 +140,31 @@ impl<B: Bits> BitPacked<B> {
   /// ```
   #[inline]
   pub fn new() -> Self {
-    BitPacked {
+    Monotone {
       storage: Box::new([0; 0]),
       phantom: PhantomData
+    }
+  }
+
+  /// Creates a `Monotone` object that encodes the slice.
+  ///
+  /// # Examples
+  /// ```
+  /// use std::mem;
+  /// use mayda::{Encodable, Monotone};
+  ///
+  /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
+  /// let bits = Monotone::from_slice(&input).unwrap();
+  ///
+  /// let output = bits.decode().unwrap();
+  /// assert_eq!(input, output);
+  /// ```
+  #[inline]
+  pub fn from_slice(slice: &[B]) -> Result<Self, super::Error> {
+    let mut bits = Self::new();
+    match bits.encode(slice) {
+      Err(error) => Err(error),
+      Ok(()) => Ok(bits)
     }
   }
 
@@ -153,9 +172,9 @@ impl<B: Bits> BitPacked<B> {
   ///
   /// # Examples
   /// ```
-  /// use mayda::BitPacked;
+  /// use mayda::Monotone;
   ///
-  /// let mut bits = BitPacked::<u32>::new();
+  /// let mut bits = Monotone::<u32>::new();
   /// assert_eq!(bits.is_empty(), true);
   /// ```
   #[inline]
@@ -167,11 +186,11 @@ impl<B: Bits> BitPacked<B> {
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, BitPacked};
+  /// use mayda::{Encodable, Monotone};
   ///
-  /// let mut bits = BitPacked::new();
+  /// let mut bits = Monotone::new();
   ///
-  /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
+  /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
   /// bits.encode(&input);
   ///
   /// assert_eq!(bits.len(), 6);
@@ -192,15 +211,15 @@ impl<B: Bits> BitPacked<B> {
     length
   }
 
-  /// Exposes the word storage of the `BitPacked` object.
+  /// Exposes the word storage of the `Monotone` object.
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, BitPacked};
+  /// use mayda::{Encodable, Monotone};
   ///
-  /// let mut bits = BitPacked::new();
+  /// let mut bits = Monotone::new();
   ///
-  /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
+  /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
   /// bits.encode(&input);
   ///
   /// let storage = bits.storage();
@@ -211,11 +230,11 @@ impl<B: Bits> BitPacked<B> {
     &self.storage
   }
 
-  /// Exposes the mutable word storage of the `BitPacked` object.
+  /// Exposes the mutable word storage of the `Monotone` object.
   ///
   /// # Safety
   ///
-  /// A `BitPacked` object performs unsafe pointer operations during encoding
+  /// A `Monotone` object performs unsafe pointer operations during encoding
   /// and decoding. Changing the header information can cause data to be
   /// written to or read from arbitrary addresses in memory. 
   #[inline]
@@ -227,11 +246,11 @@ impl<B: Bits> BitPacked<B> {
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, BitPacked};
+  /// use mayda::{Encodable, Monotone};
   ///
-  /// let mut bits = BitPacked::new();
+  /// let mut bits = Monotone::new();
   ///
-  /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
+  /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
   /// bits.encode(&input);
   ///
   /// assert_eq!(bits.required_width(), 32);
@@ -243,23 +262,22 @@ impl<B: Bits> BitPacked<B> {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// ABANDON ALL HOPE (OF SAFETY) YE WHO ENTER HERE
+// HIC SUNT LEONES
 ////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
 // Implementations of Encodable
 ////////////////////////////////////////////////////////////////////////////////
 
-/// The safe external interface.
-impl<B: Bits> Encodable<B> for BitPacked<B> {
+impl<B: Bits> Encodable<B> for Monotone<B> {
   fn encode(&mut self, input: &[B]) -> Result<(), super::Error> {
-    let storage: Vec<u32> = unsafe { try!(BitPacked::<B>::_encode(input)) };
+    let storage: Vec<u32> = unsafe { try!(Monotone::<B>::_encode(input)) };
     self.storage = storage.into_boxed_slice();
     Ok(())
   }
 
   fn decode(&self) -> Result<Vec<B>, super::Error> {
-    unsafe { BitPacked::<B>::_decode(&*self.storage) }
+    unsafe { Monotone::<B>::_decode(&*self.storage) }
   }
 }
 
@@ -280,7 +298,7 @@ trait EncodablePrivate<B: Bits> {
 }
 
 /// Default is only to catch unimplemented types. Should not be reachable.
-impl<B: Bits> EncodablePrivate<B> for BitPacked<B> {
+impl<B: Bits> EncodablePrivate<B> for Monotone<B> {
   default unsafe fn _encode(_: &[B]) -> Result<Vec<u32>, super::Error> {
     Err(super::Error::new("Encodable not implemented for this type"))
   }
@@ -302,8 +320,8 @@ macro_rules! encodable_unsigned {
   ($(($ty: ident: $step: expr,
       $enc: ident, $dec: ident,
       $enc_simd: ident, $dec_simd: ident,
-      $enc_shift: ident, $dec_shift: ident))*) => ($(
-    impl EncodablePrivate<$ty> for BitPacked<$ty> {
+      $enc_delta: ident, $dec_delta: ident))*) => ($(
+    impl EncodablePrivate<$ty> for Monotone<$ty> {
       unsafe fn _encode(input: &[$ty]) -> Result<Vec<u32>, super::Error> {
         // Nothing to do
         if input.is_empty() { return Ok(Vec::new()) }
@@ -334,17 +352,10 @@ macro_rules! encodable_unsigned {
         let shift_ptr: *mut $ty = shifts.as_mut_ptr();
 
         // Construct and apply shifts
-        let mut shift: $ty;
         for (a, &e_cnt) in e_counts.iter().enumerate() {
-          shift = *c_ptr;
-          for b in 1..(e_cnt as isize) {
-            if *c_ptr.offset(b) < shift {
-              shift = *c_ptr.offset(b);
-            }
-          }
-          *shift_ptr.offset(a as isize) = shift;
-
-          mayda_codec::$enc_shift(c_ptr, e_cnt, shift);
+          mayda_codec::$enc_delta(c_ptr, e_cnt);
+          *shift_ptr.offset(a as isize) = *c_ptr;
+          *c_ptr = 0;
           c_ptr = c_ptr.offset(e_cnt as isize);
         }
         c_ptr = scratch.as_mut_ptr();
@@ -397,7 +408,7 @@ macro_rules! encodable_unsigned {
         let mut storage: Vec<u32> = Vec::with_capacity(s_len);
         let mut s_ptr: *mut u32 = storage.as_mut_ptr();
 
-        // Write BitPacked header
+        // Write Monotone header
         *s_ptr =
           (n_blks as u32) << 2 |
           flag;
@@ -416,7 +427,7 @@ macro_rules! encodable_unsigned {
           }
 
           let l_left: usize = lvl.len() - (l_blks << 7);
-          s_ptr = BitPacked::<u64>::_encode_tail(l_ptr, s_ptr, l_left, l_wd);
+          s_ptr = Monotone::<u64>::_encode_tail(l_ptr, s_ptr, l_left, l_wd);
         }
 
         // Write the input
@@ -430,7 +441,7 @@ macro_rules! encodable_unsigned {
           s_ptr = s_ptr.offset(1);
 
           // Write the block
-          s_ptr = BitPacked::<$ty>::_encode_tail(c_ptr, s_ptr, e_cnt, e_wd);
+          s_ptr = Monotone::<$ty>::_encode_tail(c_ptr, s_ptr, e_cnt, e_wd);
           c_ptr = c_ptr.offset(e_cnt as isize);
 
           // Write the shift. Notice that some bits can be left unitialized.
@@ -451,7 +462,7 @@ macro_rules! encodable_unsigned {
         let ty_wd: u32 = $ty::width();
         let ty_wrd: usize = utility::words_for_bits(ty_wd);
 
-        // Read BitPacked header
+        // Read Monotone header
         let n_blks: usize = (storage[0] >> 2) as usize;
         let mut output: Vec<$ty> = Vec::with_capacity((n_blks + 1) << 7);
 
@@ -481,7 +492,7 @@ macro_rules! encodable_unsigned {
 
           let shift: $ty = *(s_ptr as *const $ty);
           s_ptr = s_ptr.offset(ty_wrd as isize);
-          mayda_codec::$dec_shift(o_ptr, 128, shift);
+          mayda_codec::$dec_delta(o_ptr, 128, shift);
 
           o_ptr = o_ptr.offset(128);
         }
@@ -489,13 +500,12 @@ macro_rules! encodable_unsigned {
         // Final block
         let e_wd: u32 = *s_ptr & E_WIDTH;
         let left: usize = ((*s_ptr & E_COUNT) >> 7) as usize;
-        output.set_len((n_blks << 7) + left);
         s_ptr = s_ptr.offset(1);
 
-        s_ptr = BitPacked::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
+        s_ptr = Monotone::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
 
         let shift: $ty = *(s_ptr as *const $ty);
-        mayda_codec::$dec_shift(o_ptr, left, shift);
+        mayda_codec::$dec_delta(o_ptr, left, shift);
 
         // Set the length of output AFTER everything is initialized
         output.set_len((n_blks << 7) + left);
@@ -745,52 +755,52 @@ encodable_unsigned!{
   (u8: 8,
    ENCODE_U8, DECODE_U8,
    ENCODE_SIMD_U8, DECODE_SIMD_U8,
-   encode_shift_u8, decode_shift_u8)
+   encode_delta_u8, decode_delta_u8)
   (u16: 8,
    ENCODE_U16, DECODE_U16,
    ENCODE_SIMD_U16, DECODE_SIMD_U16,
-   encode_shift_u16, decode_shift_u16)
+   encode_delta_u16, decode_delta_u16)
   (u32: 8,
    ENCODE_U32, DECODE_U32,
    ENCODE_SIMD_U32, DECODE_SIMD_U32,
-   encode_shift_u32, decode_shift_u32)
+   encode_delta_u32, decode_delta_u32)
   (u64: 8,
    ENCODE_U64, DECODE_U64,
    ENCODE_SIMD_U64, DECODE_SIMD_U64,
-   encode_shift_u64, decode_shift_u64)
+   encode_delta_u64, decode_delta_u64)
 }
 
 #[cfg(target_pointer_width = "32")]
-impl EncodablePrivate<usize> for BitPacked<usize> {
+impl EncodablePrivate<usize> for Monotone<usize> {
   #[inline]
   unsafe fn _encode(storage: &[usize]) -> Result<Vec<u32>, super::Error> {
-    BitPacked::<u32>::_encode(mem::transmute(storage))
+    Monotone::<u32>::_encode(mem::transmute(storage))
   }
 
   #[inline]
   unsafe fn _decode(storage: &[u32]) -> Result<Vec<usize>, super::Error> {
-    let scratch: Vec<u32> = try!(BitPacked::<u32>::_decode(storage));
+    let scratch: Vec<u32> = try!(Monotone::<u32>::_decode(storage));
     Ok(mem::transmute(scratch))
   }
 }
 
 #[cfg(target_pointer_width = "64")]
-impl EncodablePrivate<usize> for BitPacked<usize> {
+impl EncodablePrivate<usize> for Monotone<usize> {
   #[inline]
   unsafe fn _encode(storage: &[usize]) -> Result<Vec<u32>, super::Error> {
-    BitPacked::<u64>::_encode(mem::transmute(storage))
+    Monotone::<u64>::_encode(mem::transmute(storage))
   }
 
   #[inline]
   unsafe fn _decode(storage: &[u32]) -> Result<Vec<usize>, super::Error> {
-    let scratch: Vec<u64> = try!(BitPacked::<u64>::_decode(storage));
+    let scratch: Vec<u64> = try!(Monotone::<u64>::_decode(storage));
     Ok(mem::transmute(scratch))
   }
 }
 
 macro_rules! encodable_signed {
-  ($(($it: ident: $ut: ident, $enc_shift: ident))*) => ($(
-    impl EncodablePrivate<$it> for BitPacked<$it> {
+  ($(($it: ident: $ut: ident, $enc_delta: ident))*) => ($(
+    impl EncodablePrivate<$it> for Monotone<$it> {
       unsafe fn _encode(input: &[$it]) -> Result<Vec<u32>, super::Error> {
         // Nothing to do
         if input.is_empty() { return Ok(Vec::new()) }
@@ -821,17 +831,10 @@ macro_rules! encodable_signed {
         let shift_ptr: *mut $it = shifts.as_mut_ptr();
 
         // Construct and apply shifts
-        let mut shift: $it;
         for (a, &e_cnt) in e_counts.iter().enumerate() {
-          shift = *c_ptr;
-          for b in 1..(e_cnt as isize) {
-            if *c_ptr.offset(b) < shift {
-              shift = *c_ptr.offset(b);
-            }
-          }
-          *shift_ptr.offset(a as isize) = shift;
-
-          mayda_codec::$enc_shift(c_ptr as *mut $ut, e_cnt, shift as $ut);
+          mayda_codec::$enc_delta(c_ptr as *mut $ut, e_cnt);
+          *shift_ptr.offset(a as isize) = *c_ptr;
+          *c_ptr = 0;
           c_ptr = c_ptr.offset(e_cnt as isize);
         }
 
@@ -890,7 +893,7 @@ macro_rules! encodable_signed {
         let mut storage: Vec<u32> = Vec::with_capacity(s_len);
         let mut s_ptr: *mut u32 = storage.as_mut_ptr();
 
-        // Write BitPacked header
+        // Write Monotone header
         *s_ptr =
           (n_blks as u32) << 2 |
           flag;
@@ -909,7 +912,7 @@ macro_rules! encodable_signed {
           }
 
           let l_left: usize = lvl.len() - (l_blks << 7);
-          s_ptr = BitPacked::<u64>::_encode_tail(l_ptr, s_ptr, l_left, l_wd);
+          s_ptr = Monotone::<u64>::_encode_tail(l_ptr, s_ptr, l_left, l_wd);
         }
 
         // Write the input
@@ -923,7 +926,7 @@ macro_rules! encodable_signed {
           s_ptr = s_ptr.offset(1);
 
           // Write the block
-          s_ptr = BitPacked::<$ut>::_encode_tail(c_ptr, s_ptr, e_cnt, e_wd);
+          s_ptr = Monotone::<$ut>::_encode_tail(c_ptr, s_ptr, e_cnt, e_wd);
           c_ptr = c_ptr.offset(e_cnt as isize);
 
           // Write the shift. Notice that some bits can be left unitialized.
@@ -938,7 +941,7 @@ macro_rules! encodable_signed {
 
       #[inline]
       unsafe fn _decode(storage: &[u32]) -> Result<Vec<$it>, super::Error> {
-        let scratch: Vec<$ut> = try!(BitPacked::<$ut>::_decode(storage));
+        let scratch: Vec<$ut> = try!(Monotone::<$ut>::_decode(storage));
         Ok(mem::transmute(scratch))
       }
     }
@@ -946,36 +949,36 @@ macro_rules! encodable_signed {
 }
 
 encodable_signed!{
-  (i8: u8, encode_shift_u8)
-  (i16: u16, encode_shift_u16)
-  (i32: u32, encode_shift_u32)
-  (i64: u64, encode_shift_u64)
+  (i8: u8, encode_delta_u8)
+  (i16: u16, encode_delta_u16)
+  (i32: u32, encode_delta_u32)
+  (i64: u64, encode_delta_u64)
 }
 
 #[cfg(target_pointer_width = "32")]
-impl EncodablePrivate<isize> for BitPacked<isize> {
+impl EncodablePrivate<isize> for Monotone<isize> {
   #[inline]
   unsafe fn _encode(storage: &[isize]) -> Result<Vec<u32>, super::Error> {
-    BitPacked::<i32>::_encode(mem::transmute(storage))
+    Monotone::<i32>::_encode(mem::transmute(storage))
   }
 
   #[inline]
   unsafe fn _decode(storage: &[u32]) -> Result<Vec<isize>, super::Error> {
-    let scratch: Vec<u32> = try!(BitPacked::<u32>::_decode(storage));
+    let scratch: Vec<u32> = try!(Monotone::<u32>::_decode(storage));
     Ok(mem::transmute(scratch))
   }
 }
 
 #[cfg(target_pointer_width = "64")]
-impl EncodablePrivate<isize> for BitPacked<isize> {
+impl EncodablePrivate<isize> for Monotone<isize> {
   #[inline]
   unsafe fn _encode(storage: &[isize]) -> Result<Vec<u32>, super::Error> {
-    BitPacked::<i64>::_encode(mem::transmute(storage))
+    Monotone::<i64>::_encode(mem::transmute(storage))
   }
 
   #[inline]
   unsafe fn _decode(storage: &[u32]) -> Result<Vec<isize>, super::Error> {
-    let scratch: Vec<u64> = try!(BitPacked::<u64>::_decode(storage));
+    let scratch: Vec<u64> = try!(Monotone::<u64>::_decode(storage));
     Ok(mem::transmute(scratch))
   }
 }
@@ -996,7 +999,7 @@ trait AccessPrivate<Idx> {
 
 macro_rules! access_default {
   ($(($idx: ty, $output: ty))*) => ($(
-    impl<B: Bits> AccessPrivate<$idx> for BitPacked<B> {
+    impl<B: Bits> AccessPrivate<$idx> for Monotone<B> {
       type Output = $output;
 
       default unsafe fn _access(_: &[u32], _: $idx) -> $output {
@@ -1014,12 +1017,12 @@ access_default!{
 
 macro_rules! access {
   ($(($idx: ty, $output: ty))*) => ($(
-    impl<B: Bits> Access<$idx> for BitPacked<B> {
+    impl<B: Bits> Access<$idx> for Monotone<B> {
       type Output = $output;
 
       #[inline]
       fn access(&self, index: $idx) -> $output {
-        unsafe { BitPacked::<B>::_access(&*self.storage, index) }
+        unsafe { Monotone::<B>::_access(&*self.storage, index) }
       }
     }
   )*)
@@ -1031,7 +1034,7 @@ access!{
   (ops::RangeFrom<usize>, Vec<B>)
 }
 
-impl<B: Bits> Access<ops::RangeTo<usize>> for BitPacked<B> {
+impl<B: Bits> Access<ops::RangeTo<usize>> for Monotone<B> {
   type Output = Vec<B>;
 
   #[inline]
@@ -1040,7 +1043,7 @@ impl<B: Bits> Access<ops::RangeTo<usize>> for BitPacked<B> {
   }
 }
 
-impl<B: Bits> Access<ops::RangeFull> for BitPacked<B> {
+impl<B: Bits> Access<ops::RangeFull> for Monotone<B> {
   type Output = Vec<B>;
 
   #[inline]
@@ -1049,7 +1052,7 @@ impl<B: Bits> Access<ops::RangeFull> for BitPacked<B> {
   }
 }
 
-impl<B: Bits> Access<ops::RangeInclusive<usize>> for BitPacked<B> {
+impl<B: Bits> Access<ops::RangeInclusive<usize>> for Monotone<B> {
   type Output = Vec<B>;
 
   #[inline]
@@ -1064,7 +1067,7 @@ impl<B: Bits> Access<ops::RangeInclusive<usize>> for BitPacked<B> {
   }
 }
 
-impl<B: Bits> Access<ops::RangeToInclusive<usize>> for BitPacked<B> {
+impl<B: Bits> Access<ops::RangeToInclusive<usize>> for Monotone<B> {
   type Output = Vec<B>;
 
   #[inline]
@@ -1197,8 +1200,8 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
 }
 
 macro_rules! access_unsigned {
-  ($(($ty: ident: $step: expr, $dec: ident, $dec_simd: ident, $dec_shift: ident))*) => ($(
-    impl AccessPrivate<usize> for BitPacked<$ty> {
+  ($(($ty: ident: $step: expr, $dec: ident, $dec_simd: ident, $dec_delta: ident))*) => ($(
+    impl AccessPrivate<usize> for Monotone<$ty> {
       unsafe fn _access(storage: &[u32], index: usize) -> $ty {
         if storage.is_empty() {
           panic!(format!("index is {} but length is 0", index))
@@ -1216,7 +1219,7 @@ macro_rules! access_unsigned {
         let mut s_ptr: *const u32 = storage.as_ptr();
         let wrd_to_blk: usize = words_to_block(n_blks, blk, ty_wd, s_ptr);
 
-        // Block found, decode the value
+        // Block found, decode the block
         s_ptr = s_ptr.offset(wrd_to_blk as isize);
 
         let e_wd: u32 = *s_ptr & E_WIDTH;
@@ -1229,52 +1232,19 @@ macro_rules! access_unsigned {
           panic!(format!("index is {} but length is {}", index, len))
         }
 
-        let mut output: $ty;
-        if left == 128 {
-          // Value encoded using SIMD
-          let lanes: u32 = 128 / ty_wd;
-          let l_bits: u32 = (idx as u32 / lanes) * e_wd;
-          let mut w_bits: u32 = ty_wd - l_bits % ty_wd;
-          let mut o_bits: u32 = e_wd;
+        let mut scratch: Vec<$ty> = Vec::with_capacity(left);
+        let c_ptr: *mut $ty = scratch.as_mut_ptr();
 
-          let mut w_ptr: *const $ty = s_ptr as *const $ty;
-          w_ptr = w_ptr.offset((idx as u32 % lanes + (l_bits / ty_wd) * lanes) as isize);
-
-          output = *w_ptr >> (ty_wd - w_bits);
-          while o_bits > w_bits {
-            o_bits -= w_bits;
-            w_ptr = w_ptr.offset(lanes as isize);
-            output |= *w_ptr << (e_wd - o_bits);
-            w_bits = ty_wd;
-          }
-
-          s_ptr = s_ptr.offset(4 * e_wd as isize);
-        } else {
-          // Value encoded using u32
-          let l_bits: u32 = idx as u32 * e_wd;
-          let mut s_bits: u32 = 32 - (l_bits & 31);
-          let mut o_bits: u32 = e_wd;
-
-          let mut v_ptr: *const u32 = s_ptr.offset((l_bits / 32) as isize);
-
-          output = (*v_ptr >> (32 - s_bits)) as $ty;
-          while o_bits > s_bits {
-            o_bits -= s_bits;
-            v_ptr = v_ptr.offset(1);
-            output |= (*v_ptr as $ty) << (e_wd - o_bits);
-            s_bits = 32;
-          }
-
-          s_ptr = s_ptr.offset(utility::words_for_bits(e_wd * left as u32) as isize);
-        }
-        output &= !0 >> (ty_wd - e_wd);
+        s_ptr = Monotone::<$ty>::_decode_tail(s_ptr, c_ptr, left, e_wd);
 
         let shift: $ty = *(s_ptr as *const $ty);
-        output.wrapping_add(shift)
+        mayda_codec::$dec_delta(c_ptr, left, shift);
+
+        *c_ptr.offset(idx as isize)
       }
     }
 
-    impl AccessPrivate<ops::Range<usize>> for BitPacked<$ty> {
+    impl AccessPrivate<ops::Range<usize>> for Monotone<$ty> {
       unsafe fn _access(storage: &[u32], range: ops::Range<usize>) -> Vec<$ty> {
         if range.end < range.start {
           panic!(format!("range start is {} but range end is {}", range.start, range.end))
@@ -1325,7 +1295,7 @@ macro_rules! access_unsigned {
 
           let shift: $ty = *(s_ptr as *const $ty);
           s_ptr = s_ptr.offset(ty_wrd as isize);
-          mayda_codec::$dec_shift(o_ptr, 128, shift);
+          mayda_codec::$dec_delta(o_ptr, 128, shift);
 
           o_ptr = o_ptr.offset(128);
         }
@@ -1348,10 +1318,10 @@ macro_rules! access_unsigned {
         }
 
         // Decode final block
-        s_ptr = BitPacked::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
+        s_ptr = Monotone::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
 
         let shift: $ty = *(s_ptr as *const $ty);
-        mayda_codec::$dec_shift(o_ptr, left, shift);
+        mayda_codec::$dec_delta(o_ptr, left, shift);
 
         // Shift the entries into the desired range
         let sft: usize = range.start - (s_blk << 7);
@@ -1364,7 +1334,7 @@ macro_rules! access_unsigned {
       }
     }
 
-    impl AccessPrivate<ops::RangeFrom<usize>> for BitPacked<$ty> {
+    impl AccessPrivate<ops::RangeFrom<usize>> for Monotone<$ty> {
       unsafe fn _access(storage: &[u32], range: ops::RangeFrom<usize>) -> Vec<$ty> {
         if storage.is_empty() {
           if range.start > 0 {
@@ -1404,7 +1374,7 @@ macro_rules! access_unsigned {
 
           let shift: $ty = *(s_ptr as *const $ty);
           s_ptr = s_ptr.offset(ty_wrd as isize);
-          mayda_codec::$dec_shift(o_ptr, 128, shift);
+          mayda_codec::$dec_delta(o_ptr, 128, shift);
 
           o_ptr = o_ptr.offset(128);
         }
@@ -1424,10 +1394,10 @@ macro_rules! access_unsigned {
         }
 
         // Decode final block
-        s_ptr = BitPacked::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
+        s_ptr = Monotone::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
 
         let shift: $ty = *(s_ptr as *const $ty);
-        mayda_codec::$dec_shift(o_ptr, left, shift);
+        mayda_codec::$dec_delta(o_ptr, left, shift);
 
         // Shift the entries into the desired range
         let sft: usize = range.start - (s_blk << 7);
@@ -1443,32 +1413,32 @@ macro_rules! access_unsigned {
 }
 
 access_unsigned!{
-  (u8: 8, DECODE_U8, DECODE_SIMD_U8, decode_shift_u8)
-  (u16: 8, DECODE_U16, DECODE_SIMD_U16, decode_shift_u16)
-  (u32: 8, DECODE_U32, DECODE_SIMD_U32, decode_shift_u32)
-  (u64: 8, DECODE_U64, DECODE_SIMD_U64, decode_shift_u64)
+  (u8: 8, DECODE_U8, DECODE_SIMD_U8, decode_delta_u8)
+  (u16: 8, DECODE_U16, DECODE_SIMD_U16, decode_delta_u16)
+  (u32: 8, DECODE_U32, DECODE_SIMD_U32, decode_delta_u32)
+  (u64: 8, DECODE_U64, DECODE_SIMD_U64, decode_delta_u64)
 }
 
 macro_rules! access_signed {
   ($(($it: ident, $ut: ident))*) => ($(
-    impl AccessPrivate<usize> for BitPacked<$it> {
+    impl AccessPrivate<usize> for Monotone<$it> {
       #[inline]
       unsafe fn _access(storage: &[u32], index: usize) -> $it {
-        BitPacked::<$ut>::_access(storage, index) as $it
+        Monotone::<$ut>::_access(storage, index) as $it
       }
     }
 
-    impl AccessPrivate<ops::Range<usize>> for BitPacked<$it> {
+    impl AccessPrivate<ops::Range<usize>> for Monotone<$it> {
       #[inline]
       unsafe fn _access(storage: &[u32], range: ops::Range<usize>) -> Vec<$it> {
-        mem::transmute(BitPacked::<$ut>::_access(storage, range))
+        mem::transmute(Monotone::<$ut>::_access(storage, range))
       }
     }
 
-    impl AccessPrivate<ops::RangeFrom<usize>> for BitPacked<$it> {
+    impl AccessPrivate<ops::RangeFrom<usize>> for Monotone<$it> {
       #[inline]
       unsafe fn _access(storage: &[u32], range: ops::RangeFrom<usize>) -> Vec<$it> {
-        mem::transmute(BitPacked::<$ut>::_access(storage, range))
+        mem::transmute(Monotone::<$ut>::_access(storage, range))
       }
     }
   )*)

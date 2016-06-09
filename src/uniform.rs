@@ -4,30 +4,35 @@
 // http://opensource.org/licenses/MIT>. This file may not be copied, modified,
 // or distributed except according to those terms.
 
-//! `Patched` encoding of integer arrays. Intended for general purpose
-//! encoding, where detailed information about the probability distribution of
-//! the entries is not known. Implemented for all primitive integer types.
+//! `Uniform` encoding of integer arrays. Intended for cases where encoding and
+//! decoding speed is desired, or the probability distribution of the entries
+//! is uniform within certain bounds. Implemented for all primitive integer
+//! types.
 //!
-//! Slower than the `BitPacked` encoding, but compression decays more
-//! gracefully with the standard deviation of the probability distribution of
-//! the entries.
+//! Significantly faster than the `Unimodal` encoding, but compression decays
+//! with the magnitude of the difference between the largest and smallest
+//! entries.
 //!
 //! # Examples
 //!
 //! ```
-//! use mayda::{Access, Encodable, Patched};
+//! use mayda::utility::{Access, Encodable};
+//! use mayda::uniform::Uniform;
 //!
 //! let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
-//! let mut patched = Patched::new();
-//! patched.encode(&input).unwrap();
+//! let mut bits = Uniform::new();
+//! bits.encode(&input);
 //!
-//! let output = patched.decode().unwrap();
+//! let length = bits.len();
+//! assert_eq!(length, 6);
+//!
+//! let output = bits.decode().unwrap();
 //! assert_eq!(input, output);
 //!
-//! let value = patched.access(4);
+//! let value = bits.access(4);
 //! assert_eq!(value, 5);
 //!
-//! let range = patched.access(1..4);
+//! let range = bits.access(1..4);
 //! assert_eq!(range, vec![4, 2, 8]); 
 //! ```
 
@@ -39,11 +44,8 @@ use utility::{self, Bits, Encodable, Access};
 
 const E_WIDTH: u32 = 0x0000007f;
 const E_COUNT: u32 = 0x00007f80;
-const X_WIDTH: u32 = 0x003f8000;
-const X_COUNT: u32 = 0x1fc00000;
-const I_WIDTH: u32 = 0xe0000000;
 
-/// The type of a patched encoded integer array. Designed for moderate
+/// The type of a uniform encoded integer array. Designed for moderate
 /// compression and efficient decoding through the `Encodable` trait, and
 /// efficient random access through the `Access` trait.
 ///
@@ -54,26 +56,30 @@ const I_WIDTH: u32 = 0xe0000000;
 /// # Examples
 ///
 /// ```
-/// use mayda::{Access, Encodable, Patched};
+/// use mayda::utility::{Access, Encodable};
+/// use mayda::uniform::Uniform;
 ///
 /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
-/// let mut patched = Patched::new();
-/// patched.encode(&input).unwrap();
+/// let mut bits = Uniform::new();
+/// bits.encode(&input);
 ///
-/// let output = patched.decode().unwrap();
+/// let length = bits.len();
+/// assert_eq!(length, 6);
+///
+/// let output = bits.decode().unwrap();
 /// assert_eq!(input, output);
 ///
-/// let value = patched.access(4);
+/// let value = bits.access(4);
 /// assert_eq!(value, 5);
 ///
-/// let range = patched.access(1..4);
+/// let range = bits.access(1..4);
 /// assert_eq!(range, vec![4, 2, 8]); 
 /// ```
 ///
 /// # Indexing
 ///
-/// Indexing a `Patched` object is not a simple pointer offset. The header of a
-/// `Patched` object effectively encodes the relative offsets to every block,
+/// Indexing a `Uniform` object is not a simple pointer offset. The header of a
+/// `Uniform` object effectively encodes the relative offsets to every block,
 /// with the result that random access via the `Access` trait is an
 /// `O(log(idx))` operation, where `idx` is the value of the index (not the
 /// length of the array). The overhead of the header is around a tenth of a bit
@@ -85,21 +91,19 @@ const I_WIDTH: u32 = 0xe0000000;
 /// # Performance
 ///
 /// Decoding does not allocate except for the return value, and decodes around
-/// 4.5 GiB/s of decoded integers. Encoding allocates `O(n)` memory (`n` in the
-/// length of the array), and encodes around 250 MiB/s of decoded integers.
-/// About half the runtime is due to the algorithm `utility::select_m` used to
-/// find the median of a block. Run `cargo bench --bench patched` for
-/// performance numbers on your setup.
+/// 13 GiB/s of decoded integers. Encoding allocates `O(n)` memory (`n` in the
+/// length of the array), and encodes around 3 GiB/s of decoded integers.  Run
+/// `cargo bench --bench uniform` for performance numbers on your setup.
 ///
 /// The performance (speed and compression) degrades gradually as the number of
-/// entries falls below 128.
+/// integers falls below 128.
 ///
 /// # Safety
 ///
-/// As a general rule, DO NOT decode or access `Patched` objects from untrusted
+/// As a general rule, DO NOT decode or access `Uniform` objects from untrusted
 /// sources.
 ///
-/// A `Patched` object performs unsafe pointer operations during encoding and
+/// A `Uniform` object performs unsafe pointer operations during encoding and
 /// decoding. Changing the header information with `mut_storage()` can cause
 /// data to be written to or read from arbitrary addresses in memory.
 ///
@@ -115,42 +119,61 @@ const I_WIDTH: u32 = 0xe0000000;
 /// all of the entries in a block with a single minimum necessary bit width. 
 /// This allows SIMD operations to be used to accelerate encoding and decoding.
 ///
-/// This approach does not perform well for probability distributions with
-/// outliers though, or for situations where the median value is nonzero. The
-/// `Patched` encoding handles this by performing several initial
-/// transformations to reduce the minimum necessary bit width. Specifically,
-/// the median value is subtracted from the entries, the entries are mapped to
-/// the unsigned integers by the zig-zag encoding, and the most significant
-/// bits of any outliers are removed and stored separately. The result is that
-/// the compression effectively depends only on the standard deviation of the 
-/// probability distribution of the block entries.
+/// While this approach does not perform well for probability distributions
+/// with outliers, the `Uniform` encoding does not try to address this and
+/// instead targets encoding and decoding speed. The only transformation is to
+/// subtract the minimum value from the entries, with the result that the
+/// compression depends only on the difference between the largest and smallest
+/// entries.
 #[derive(Clone, Debug, Default, Hash, PartialEq, PartialOrd)]
-pub struct Patched<B> {
+pub struct Uniform<B> {
   storage: Box<[u32]>,
   phantom: PhantomData<B>
 }
 
-impl<B: Bits> Patched<B> {
-  /// Creates an empty `Patched` object.
+impl<B: Bits> Uniform<B> {
+  /// Creates an empty `Uniform` object.
   ///
   /// # Examples
   /// ```
   /// use std::mem;
-  /// use mayda::{Encodable, Patched};
+  /// use mayda::{Encodable, Uniform};
   ///
-  /// let mut patched = Patched::new();
+  /// let mut bits = Uniform::new();
   ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
-  /// patched.encode(&input);
+  /// bits.encode(&input);
   ///
-  /// let bytes = mem::size_of_val(&patched);
+  /// let bytes = mem::size_of_val(&bits);
   /// assert_eq!(bytes, 16);
   /// ```
   #[inline]
   pub fn new() -> Self {
-    Patched {
+    Uniform {
       storage: Box::new([0; 0]),
       phantom: PhantomData
+    }
+  }
+
+  /// Creates a `Uniform` object that encodes the slice.
+  ///
+  /// # Examples
+  /// ```
+  /// use std::mem;
+  /// use mayda::{Encodable, Uniform};
+  ///
+  /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
+  /// let bits = Uniform::from_slice(&input).unwrap();
+  ///
+  /// let output = bits.decode().unwrap();
+  /// assert_eq!(input, output);
+  /// ```
+  #[inline]
+  pub fn from_slice(slice: &[B]) -> Result<Self, super::Error> {
+    let mut bits = Self::new();
+    match bits.encode(slice) {
+      Err(error) => Err(error),
+      Ok(()) => Ok(bits)
     }
   }
 
@@ -158,10 +181,10 @@ impl<B: Bits> Patched<B> {
   ///
   /// # Examples
   /// ```
-  /// use mayda::Patched;
+  /// use mayda::Uniform;
   ///
-  /// let mut patched = Patched::<u32>::new();
-  /// assert_eq!(patched.is_empty(), true);
+  /// let mut bits = Uniform::<u32>::new();
+  /// assert_eq!(bits.is_empty(), true);
   /// ```
   #[inline]
   pub fn is_empty(&self) -> bool {
@@ -172,14 +195,14 @@ impl<B: Bits> Patched<B> {
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, Patched};
+  /// use mayda::{Encodable, Uniform};
   ///
-  /// let mut patched = Patched::new();
+  /// let mut bits = Uniform::new();
   ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
-  /// patched.encode(&input);
+  /// bits.encode(&input);
   ///
-  /// assert_eq!(patched.len(), 6);
+  /// assert_eq!(bits.len(), 6);
   /// ```
   pub fn len(&self) -> usize {
     if self.storage.is_empty() { return 0 }
@@ -197,18 +220,18 @@ impl<B: Bits> Patched<B> {
     length
   }
 
-  /// Exposes the word storage of the `Patched` object.
+  /// Exposes the word storage of the `Uniform` object.
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, Patched};
+  /// use mayda::{Encodable, Uniform};
   ///
-  /// let mut patched = Patched::new();
+  /// let mut bits = Uniform::new();
   ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
-  /// patched.encode(&input);
+  /// bits.encode(&input);
   ///
-  /// let storage = patched.storage();
+  /// let storage = bits.storage();
   /// assert_eq!(storage.len(), 4);
   /// ```
   #[inline]
@@ -216,13 +239,13 @@ impl<B: Bits> Patched<B> {
     &self.storage
   }
 
-  /// Exposes the mutable word storage of the `Patched` object.
+  /// Exposes the mutable word storage of the `Uniform` object.
   ///
   /// # Safety
   ///
-  /// A `Patched` object performs unsafe pointer operations during encoding and
-  /// decoding. Changing the header information can cause data to be written to
-  /// or read from arbitrary addresses in memory. 
+  /// A `Uniform` object performs unsafe pointer operations during encoding
+  /// and decoding. Changing the header information can cause data to be
+  /// written to or read from arbitrary addresses in memory. 
   #[inline]
   pub unsafe fn mut_storage(&mut self) -> &mut Box<[u32]> {
     &mut self.storage
@@ -232,14 +255,14 @@ impl<B: Bits> Patched<B> {
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, Patched};
+  /// use mayda::{Encodable, Uniform};
   ///
-  /// let mut patched = Patched::new();
+  /// let mut bits = Uniform::new();
   ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
-  /// patched.encode(&input);
+  /// bits.encode(&input);
   ///
-  /// assert_eq!(patched.required_width(), 32);
+  /// assert_eq!(bits.required_width(), 32);
   /// ```
   #[inline]
   pub fn required_width(&self) -> u32 {
@@ -248,23 +271,22 @@ impl<B: Bits> Patched<B> {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// ABANDON ALL HOPE (OF SAFETY) YE WHO ENTER HERE
+// HIC SUNT LEONES
 ////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
 // Implementations of Encodable
 ////////////////////////////////////////////////////////////////////////////////
 
-/// The safe external interface.
-impl<B: Bits> Encodable<B> for Patched<B> {
+impl<B: Bits> Encodable<B> for Uniform<B> {
   fn encode(&mut self, input: &[B]) -> Result<(), super::Error> {
-    let storage: Vec<u32> = unsafe { try!(Patched::<B>::_encode(input)) };
+    let storage: Vec<u32> = unsafe { try!(Uniform::<B>::_encode(input)) };
     self.storage = storage.into_boxed_slice();
     Ok(())
   }
 
   fn decode(&self) -> Result<Vec<B>, super::Error> {
-    unsafe { Patched::<B>::_decode(&*self.storage) }
+    unsafe { Uniform::<B>::_decode(&*self.storage) }
   }
 }
 
@@ -285,7 +307,7 @@ trait EncodablePrivate<B: Bits> {
 }
 
 /// Default is only to catch unimplemented types. Should not be reachable.
-impl<B: Bits> EncodablePrivate<B> for Patched<B> {
+impl<B: Bits> EncodablePrivate<B> for Uniform<B> {
   default unsafe fn _encode(_: &[B]) -> Result<Vec<u32>, super::Error> {
     Err(super::Error::new("Encodable not implemented for this type"))
   }
@@ -307,12 +329,12 @@ macro_rules! encodable_unsigned {
   ($(($ty: ident: $step: expr,
       $enc: ident, $dec: ident,
       $enc_simd: ident, $dec_simd: ident,
-      $enc_zz: ident, $dec_zz: ident))*) => ($(
-    impl EncodablePrivate<$ty> for Patched<$ty> {
+      $enc_shift: ident, $dec_shift: ident))*) => ($(
+    impl EncodablePrivate<$ty> for Uniform<$ty> {
       unsafe fn _encode(input: &[$ty]) -> Result<Vec<u32>, super::Error> {
         // Nothing to do
         if input.is_empty() { return Ok(Vec::new()) }
-
+        
         // Allow arrays of 2^37 entries (512 GiB of u32)
         let n_blks: usize = (input.len() - 1) >> 7;
         let n_lvls: usize = n_blks.bits() as usize;
@@ -335,98 +357,40 @@ macro_rules! encodable_unsigned {
 
         let mut scratch: Vec<$ty> = input.to_vec();
         let mut shifts: Vec<$ty> = Vec::with_capacity(n_blks + 1);
+        let mut c_ptr: *mut $ty = scratch.as_mut_ptr();
         let shift_ptr: *mut $ty = shifts.as_mut_ptr();
 
-        // Construct shifts
-        let mut lwr: usize = 0;
+        // Construct and apply shifts
+        let mut shift: $ty;
         for (a, &e_cnt) in e_counts.iter().enumerate() {
-          let slice: &mut [$ty] = &mut scratch[lwr..(lwr + e_cnt)];
-          *shift_ptr.offset(a as isize) = utility::select_m(slice, e_cnt >> 1);
-          lwr += e_cnt;
-        }
-        scratch.copy_from_slice(input);
+          shift = *c_ptr;
+          for b in 1..(e_cnt as isize) {
+            if *c_ptr.offset(b) < shift {
+              shift = *c_ptr.offset(b);
+            }
+          }
+          *shift_ptr.offset(a as isize) = shift;
 
-        // Apply shifts
-        let mut c_ptr: *mut $ty = scratch.as_mut_ptr();
-        for (a, &e_cnt) in e_counts.iter().enumerate() {
-          mayda_codec::$enc_zz(c_ptr, e_cnt, *shift_ptr.offset(a as isize));
+          mayda_codec::$enc_shift(c_ptr, e_cnt, shift);
           c_ptr = c_ptr.offset(e_cnt as isize);
         }
         c_ptr = scratch.as_mut_ptr();
-
-        // Quantities used for the headers
+        
+        // Quantity used for the headers
         let mut e_widths: Vec<u32> = Vec::with_capacity(n_blks + 1);
-        let mut x_widths: Vec<u32> = Vec::with_capacity(n_blks + 1);
-        let mut i_widths: Vec<u32> = Vec::with_capacity(n_blks + 1);
-        let mut words: Vec<u64> = Vec::with_capacity(n_blks + 1);
-
         let e_wd_ptr: *mut u32 = e_widths.as_mut_ptr();
-        let x_wd_ptr: *mut u32 = x_widths.as_mut_ptr();
-        let i_wd_ptr: *mut u32 = i_widths.as_mut_ptr();
-        let wrd_ptr: *mut u64 = words.as_mut_ptr();
 
-        // Construct block header information
-        let mut bit_dist: Vec<u32> = Vec::with_capacity(ty_wd as usize + 1);
-        let mut e_wd_words: Vec<usize> = Vec::with_capacity(ty_wd as usize + 1);
-
-        let bit_ptr: *mut u32 = bit_dist.as_mut_ptr();
-        let eww_ptr: *mut usize = e_wd_words.as_mut_ptr();
-
-        bit_dist.set_len(ty_wd as usize + 1);
+        // Find widths of all blocks
+        let mut blk_max: $ty;
         for (a, &e_cnt) in e_counts.iter().enumerate() {
-          // Find distribution of bits
-          ptr::write_bytes(bit_ptr, 0u8, ty_wd as usize + 1);
-          for b in 0..(e_cnt as isize) {
-            *bit_ptr.offset((*c_ptr.offset(b)).bits() as isize) += 1;
-          }
-          let max_e_wd: u32 = bit_dist.iter()
-            .rposition(|&x| x != 0)
-            .unwrap() as u32;
-
-          // Find e_wd and x_wd
-          let mut acc: u32 = 0;
-          for e_wd in 0...max_e_wd {
-            acc += *bit_ptr.offset(e_wd as isize);
-            let x_cnt: u32 = e_cnt as u32 - acc;
-            *eww_ptr.offset(e_wd as isize) =
-              utility::words_for_bits(e_wd * e_cnt as u32) +
-              utility::words_for_bits(acc.bits() * x_cnt) +
-              utility::words_for_bits((max_e_wd - e_wd) * x_cnt);
-          }
-          e_wd_words.set_len(max_e_wd as usize + 1);
-          let (e_wd, _) = e_wd_words.iter().enumerate().fold(
-            (0, !0), |(a, b), (c, &d)| if d <= b { (c, d) } else { (a, b) }
-          );
-          let e_wd: u32 = e_wd as u32;
-          let x_wd: u32 = max_e_wd - e_wd;
-
-          // Find i_wd and x_cnt. The values of the indices and exceptions are
-          // not stored since the required memory is not reasonably bounded.
-          let mask: $ty = { if e_wd > 0 { !0 >> (ty_wd - e_wd) } else { 0 } };
-          let mut idx_max: usize = 0;
-          let mut prev: usize = 0;
-          let mut x_cnt: u32 = 0;
-          for b in 0..e_cnt {
-            if *c_ptr > mask {
-              idx_max |= b - prev;
-              prev = b;
-              x_cnt += 1;
-            }
+          blk_max = 0;
+          for _ in 0..e_cnt {
+            blk_max |= *c_ptr;
             c_ptr = c_ptr.offset(1);
           }
-          let i_wd: u32 = idx_max.bits();
-
-          let wrd: usize =
-            utility::words_for_bits(e_wd * e_cnt as u32) +
-            utility::words_for_bits(i_wd * x_cnt) +
-            utility::words_for_bits(x_wd * x_cnt);
-
-          *e_wd_ptr.offset(a as isize) = e_wd;
-          *x_wd_ptr.offset(a as isize) = x_wd;
-          *i_wd_ptr.offset(a as isize) = i_wd;
-          *wrd_ptr.offset(a as isize) = wrd as u64;
+          *e_wd_ptr.offset(a as isize) = blk_max.bits();
         }
-        words.set_len(n_blks + 1);
+        e_widths.set_len(n_blks + 1);
         c_ptr = scratch.as_mut_ptr();
 
         // Construct index header
@@ -437,29 +401,30 @@ macro_rules! encodable_unsigned {
           for b in (0..(length as isize)).map(|x| x << (a + 1)) {
             let mut acc: u64 = 0;
             for c in 0..(1 << a) {
-              acc += *wrd_ptr.offset(b + c);
+              acc += *e_wd_ptr.offset(b + c) as u64;
             }
             lvl.push(acc);
           }
           lvls.push(lvl);
         }
-
+        
         // Lengths of index header and blocks
-        let base_wd: u32 = ty_wd.bits() + 2;
+        let base_wd: u32 = ty_wd.bits();
         let mut h_words: usize = 0;
         for (a, x) in lvls.iter().enumerate() {
           let bits: u32 = (base_wd + a as u32) * x.len() as u32;
           h_words += utility::words_for_bits(bits);
         }
         let b_words: usize = (n_blks + 1) * (1 + ty_wrd) +
-          words.iter().sum::<u64>() as usize;
+          4 * e_widths[..n_blks].iter().sum::<u32>() as usize +
+          utility::words_for_bits(e_counts[n_blks] as u32 * e_widths[n_blks]);
 
         // Construct storage
         let s_len: usize = 1 + h_words + b_words;
         let mut storage: Vec<u32> = Vec::with_capacity(s_len);
         let mut s_ptr: *mut u32 = storage.as_mut_ptr();
 
-        // Write Patched header
+        // Write Uniform header
         *s_ptr =
           (n_blks as u32) << 2 |
           flag;
@@ -478,57 +443,29 @@ macro_rules! encodable_unsigned {
           }
 
           let l_left: usize = lvl.len() - (l_blks << 7);
-          s_ptr = Patched::<u64>::_encode_tail(l_ptr, s_ptr, l_left, l_wd);
+          s_ptr = Uniform::<u64>::_encode_tail(l_ptr, s_ptr, l_left, l_wd);
         }
 
         // Write the input
-        let mut exceptions: [$ty; 127] = [0; 127];
-        let mut indices: [u8; 127] = [0; 127];
-        let exc_ptr: *mut $ty = exceptions.as_mut_ptr();
-        let idx_ptr: *mut u8 = indices.as_mut_ptr();
-
         for (a, &e_cnt) in e_counts.iter().enumerate() {
           let e_wd: u32 = *e_wd_ptr.offset(a as isize);
-          let x_wd: u32 = *x_wd_ptr.offset(a as isize);
-          let i_wd: u32 = *i_wd_ptr.offset(a as isize);
 
-          // Find exceptions and indices
-          let mask: $ty = { if e_wd > 0 { !0 >> (ty_wd - e_wd) } else { 0 } };
-          let mut prev: isize = 0;
-          let mut x_cnt: usize = 0;
-          for b in 0..(e_cnt as isize) {
-            if *c_ptr.offset(b) > mask {
-              *exc_ptr.offset(x_cnt as isize) = *c_ptr.offset(b) >> e_wd;
-              *c_ptr.offset(b) &= mask;
-              *idx_ptr.offset(x_cnt as isize) = (b - prev) as u8;
-              prev = b;
-              x_cnt += 1;
-            }
-          }
-          
           // Write block header
           *s_ptr = 
-            i_wd << 29 |
-            (x_cnt as u32) << 22 |
-            x_wd << 15 |
             (e_cnt as u32) << 7 |
             e_wd;
           s_ptr = s_ptr.offset(1);
 
           // Write the block
-          s_ptr = Patched::<$ty>::_encode_tail(c_ptr, s_ptr, e_cnt, e_wd);
+          s_ptr = Uniform::<$ty>::_encode_tail(c_ptr, s_ptr, e_cnt, e_wd);
           c_ptr = c_ptr.offset(e_cnt as isize);
-          if x_cnt > 0 {
-            s_ptr = Patched::<u8>::_encode_tail(idx_ptr, s_ptr, x_cnt, i_wd);
-            s_ptr = Patched::<$ty>::_encode_tail(exc_ptr, s_ptr, x_cnt, x_wd);
-          }
 
           // Write the shift. Notice that some bits can be left unitialized.
           *(s_ptr as *mut $ty) = *shift_ptr.offset(a as isize);
           s_ptr = s_ptr.offset(ty_wrd as isize);
         }
 
-        // Set storage length AFTER everything is initialized
+        // Set the length of storage AFTER everything is initialized
         storage.set_len(s_len);
         Ok(storage)
       }
@@ -541,13 +478,13 @@ macro_rules! encodable_unsigned {
         let ty_wd: u32 = $ty::width();
         let ty_wrd: usize = utility::words_for_bits(ty_wd);
 
-        // Read Patched header
+        // Read Uniform header
         let n_blks: usize = (storage[0] >> 2) as usize;
         let mut output: Vec<$ty> = Vec::with_capacity((n_blks + 1) << 7);
 
         // Length of index header
         let n_lvls: u32 = n_blks.bits();
-        let base_wd: u32  = ty_wd.bits() + 2;
+        let base_wd: u32  = ty_wd.bits();
         let mut h_words: usize = 0;
         for a in 0..n_lvls {
           let len: usize = ((n_blks - (1 << a)) >> (a + 1)) + 1;
@@ -559,36 +496,19 @@ macro_rules! encodable_unsigned {
         s_ptr = s_ptr.offset(1 + h_words as isize);
         let mut o_ptr: *mut $ty = output.as_mut_ptr();
 
-        let mut exceptions: [$ty; 127] = [0; 127];
-        let mut indices: [u8; 127] = [0; 127];
-        let exp_ptr: *mut $ty = exceptions.as_mut_ptr();
-        let idx_ptr: *mut u8 = indices.as_mut_ptr();
-
         // Block size is known for all but the final block
         for _ in 0..n_blks {
           // Find the width of the block
           let e_wd: u32 = *s_ptr & E_WIDTH;
-          let x_wd: u32 = (*s_ptr & X_WIDTH) >> 15;
-          let x_cnt: usize = ((*s_ptr & X_COUNT) >> 22) as usize;
-          let i_wd: u32 = (*s_ptr & I_WIDTH) >> 29;
           s_ptr = s_ptr.offset(1);
 
           // Decode the block
           mayda_codec::$dec_simd[e_wd as usize](s_ptr, o_ptr);
           s_ptr = s_ptr.offset(4 * e_wd as isize);
-          if x_cnt > 0 {
-            s_ptr = Patched::<u8>::_decode_tail(s_ptr, idx_ptr, x_cnt, i_wd);
-            s_ptr = Patched::<$ty>::_decode_tail(s_ptr, exp_ptr, x_cnt, x_wd);
-            let mut idx: u8 = 0;
-            for a in 0..(x_cnt as isize) {
-              idx += *idx_ptr.offset(a);
-              *o_ptr.offset(idx as isize) |= *exp_ptr.offset(a) << e_wd;
-            }
-          }
 
           let shift: $ty = *(s_ptr as *const $ty);
           s_ptr = s_ptr.offset(ty_wrd as isize);
-          mayda_codec::$dec_zz(o_ptr, 128, shift);
+          mayda_codec::$dec_shift(o_ptr, 128, shift);
 
           o_ptr = o_ptr.offset(128);
         }
@@ -596,24 +516,12 @@ macro_rules! encodable_unsigned {
         // Final block
         let e_wd: u32 = *s_ptr & E_WIDTH;
         let left: usize = ((*s_ptr & E_COUNT) >> 7) as usize;
-        let x_wd: u32 = (*s_ptr & X_WIDTH) >> 15;
-        let x_cnt: usize = ((*s_ptr & X_COUNT) >> 22) as usize;
-        let i_wd: u32 = (*s_ptr & I_WIDTH) >> 29;
         s_ptr = s_ptr.offset(1);
 
-        s_ptr = Patched::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
-        if x_cnt > 0 {
-          s_ptr = Patched::<u8>::_decode_tail(s_ptr, idx_ptr, x_cnt, i_wd);
-          s_ptr = Patched::<$ty>::_decode_tail(s_ptr, exp_ptr, x_cnt, x_wd);
-          let mut idx: u8 = 0;
-          for a in 0..(x_cnt as isize) {
-            idx += *idx_ptr.offset(a);
-            *o_ptr.offset(idx as isize) |= *exp_ptr.offset(a) << e_wd;
-          }
-        }
+        s_ptr = Uniform::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
 
         let shift: $ty = *(s_ptr as *const $ty);
-        mayda_codec::$dec_zz(o_ptr, left, shift);
+        mayda_codec::$dec_shift(o_ptr, left, shift);
 
         // Set the length of output AFTER everything is initialized
         output.set_len((n_blks << 7) + left);
@@ -863,57 +771,57 @@ encodable_unsigned!{
   (u8: 8,
    ENCODE_U8, DECODE_U8,
    ENCODE_SIMD_U8, DECODE_SIMD_U8,
-   encode_zz_shift_u8, decode_zz_shift_u8)
+   encode_shift_u8, decode_shift_u8)
   (u16: 8,
    ENCODE_U16, DECODE_U16,
    ENCODE_SIMD_U16, DECODE_SIMD_U16,
-   encode_zz_shift_u16, decode_zz_shift_u16)
+   encode_shift_u16, decode_shift_u16)
   (u32: 8,
    ENCODE_U32, DECODE_U32,
    ENCODE_SIMD_U32, DECODE_SIMD_U32,
-   encode_zz_shift_u32, decode_zz_shift_u32)
+   encode_shift_u32, decode_shift_u32)
   (u64: 8,
    ENCODE_U64, DECODE_U64,
    ENCODE_SIMD_U64, DECODE_SIMD_U64,
-   encode_zz_shift_u64, decode_zz_shift_u64)
+   encode_shift_u64, decode_shift_u64)
 }
 
 #[cfg(target_pointer_width = "32")]
-impl EncodablePrivate<usize> for Patched<usize> {
+impl EncodablePrivate<usize> for Uniform<usize> {
   #[inline]
   unsafe fn _encode(storage: &[usize]) -> Result<Vec<u32>, super::Error> {
-    Patched::<u32>::_encode(mem::transmute(storage))
+    Uniform::<u32>::_encode(mem::transmute(storage))
   }
 
   #[inline]
   unsafe fn _decode(storage: &[u32]) -> Result<Vec<usize>, super::Error> {
-    let scratch: Vec<u32> = try!(Patched::<u32>::_decode(storage));
+    let scratch: Vec<u32> = try!(Uniform::<u32>::_decode(storage));
     Ok(mem::transmute(scratch))
   }
 }
 
 #[cfg(target_pointer_width = "64")]
-impl EncodablePrivate<usize> for Patched<usize> {
+impl EncodablePrivate<usize> for Uniform<usize> {
   #[inline]
   unsafe fn _encode(storage: &[usize]) -> Result<Vec<u32>, super::Error> {
-    Patched::<u64>::_encode(mem::transmute(storage))
+    Uniform::<u64>::_encode(mem::transmute(storage))
   }
 
   #[inline]
   unsafe fn _decode(storage: &[u32]) -> Result<Vec<usize>, super::Error> {
-    let scratch: Vec<u64> = try!(Patched::<u64>::_decode(storage));
+    let scratch: Vec<u64> = try!(Uniform::<u64>::_decode(storage));
     Ok(mem::transmute(scratch))
   }
 }
 
 macro_rules! encodable_signed {
-  ($(($it: ident: $ut: ident, $enc_zz: ident))*) => ($(
-    impl EncodablePrivate<$it> for Patched<$it> {
+  ($(($it: ident: $ut: ident, $enc_shift: ident))*) => ($(
+    impl EncodablePrivate<$it> for Uniform<$it> {
       unsafe fn _encode(input: &[$it]) -> Result<Vec<u32>, super::Error> {
         // Nothing to do
         if input.is_empty() { return Ok(Vec::new()) }
-
-        // Allow arrays of 2^37 entries (128 GB of u8)
+        
+        // Allow arrays of 2^37 entries (512 GiB of u32)
         let n_blks: usize = (input.len() - 1) >> 7;
         let n_lvls: usize = n_blks.bits() as usize;
         if n_lvls > 30 {
@@ -935,105 +843,46 @@ macro_rules! encodable_signed {
 
         let mut scratch: Vec<$it> = input.to_vec();
         let mut shifts: Vec<$it> = Vec::with_capacity(n_blks + 1);
+        let mut c_ptr: *mut $it = scratch.as_mut_ptr();
         let shift_ptr: *mut $it = shifts.as_mut_ptr();
 
-        // Construct shifts
-        let mut lwr: usize = 0;
+        // Construct and apply shifts
+        let mut shift: $it;
         for (a, &e_cnt) in e_counts.iter().enumerate() {
-          let slice: &mut [$it] = &mut scratch[lwr..(lwr + e_cnt)];
-          *shift_ptr.offset(a as isize) = utility::select_m(slice, e_cnt >> 1);
-          lwr += e_cnt;
+          shift = *c_ptr;
+          for b in 1..(e_cnt as isize) {
+            if *c_ptr.offset(b) < shift {
+              shift = *c_ptr.offset(b);
+            }
+          }
+          *shift_ptr.offset(a as isize) = shift;
+
+          mayda_codec::$enc_shift(c_ptr as *mut $ut, e_cnt, shift as $ut);
+          c_ptr = c_ptr.offset(e_cnt as isize);
         }
-        scratch.copy_from_slice(input);
 
         // Transmute to unsigned. This and the use of the signed type for the 
         // calculation of the shifts is the only difference with the unsigned
         // implementation. Hope to eventually share the following parts.
         let mut scratch: Vec<$ut> = mem::transmute(scratch);
+        let mut c_ptr: *mut $ut = scratch.as_mut_ptr();
         let shift_ptr: *mut $ut = shift_ptr as *mut $ut;
         
-        // Apply shifts
-        let mut c_ptr: *mut $ut = scratch.as_mut_ptr();
-        for (a, &e_cnt) in e_counts.iter().enumerate() {
-          mayda_codec::$enc_zz(c_ptr, e_cnt, *shift_ptr.offset(a as isize));
-          c_ptr = c_ptr.offset(e_cnt as isize);
-        }
-        c_ptr = scratch.as_mut_ptr();
-
-        // Quantities used for the headers
+        // Quantity used for the headers
         let mut e_widths: Vec<u32> = Vec::with_capacity(n_blks + 1);
-        let mut x_widths: Vec<u32> = Vec::with_capacity(n_blks + 1);
-        let mut i_widths: Vec<u32> = Vec::with_capacity(n_blks + 1);
-        let mut words: Vec<u64> = Vec::with_capacity(n_blks + 1);
-
         let e_wd_ptr: *mut u32 = e_widths.as_mut_ptr();
-        let x_wd_ptr: *mut u32 = x_widths.as_mut_ptr();
-        let i_wd_ptr: *mut u32 = i_widths.as_mut_ptr();
-        let wrd_ptr: *mut u64 = words.as_mut_ptr();
 
-        // Construct block header information
-        let mut bit_dist: Vec<u32> = Vec::with_capacity(ty_wd as usize + 1);
-        let mut e_wd_words: Vec<usize> = Vec::with_capacity(ty_wd as usize + 1);
-
-        let bit_ptr: *mut u32 = bit_dist.as_mut_ptr();
-        let eww_ptr: *mut usize = e_wd_words.as_mut_ptr();
-
-        bit_dist.set_len(ty_wd as usize + 1);
+        // Find widths of all blocks
+        let mut blk_max: $ut;
         for (a, &e_cnt) in e_counts.iter().enumerate() {
-          // Find distribution of bits
-          ptr::write_bytes(bit_ptr, 0u8, ty_wd as usize + 1);
-          for b in 0..(e_cnt as isize) {
-            *bit_ptr.offset((*c_ptr.offset(b)).bits() as isize) += 1;
-          }
-          let max_e_wd: u32 = bit_dist.iter()
-            .rposition(|x| *x != 0)
-            .unwrap() as u32;
-
-          // Find e_wd and x_wd
-          let mut acc: u32 = 0;
-          for e_wd in 0...max_e_wd {
-            acc += *bit_ptr.offset(e_wd as isize);
-            let x_cnt: u32 = e_cnt as u32 - acc;
-            *eww_ptr.offset(e_wd as isize) =
-              utility::words_for_bits(e_wd * e_cnt as u32) +
-              utility::words_for_bits(acc.bits() * x_cnt) +
-              utility::words_for_bits((max_e_wd - e_wd) * x_cnt);
-          }
-          e_wd_words.set_len(max_e_wd as usize + 1);
-          let (e_wd, _) = e_wd_words.iter().enumerate().fold(
-            (0, !0), |(a, b), (c, &d)| if d <= b { (c, d) } else { (a, b) }
-          );
-          let e_wd: u32 = e_wd as u32;
-          let x_wd: u32 = max_e_wd - e_wd;
-
-          // Find i_wd and x_cnt. The values of the indices and exceptions are
-          // not stored since the required memory is not reasonably bounded.
-          let mask: $ut = { if e_wd > 0 { !0 >> (ty_wd - e_wd) } else { 0 } };
-
-          let mut idx_max: usize = 0;
-          let mut prev: usize = 0;
-          let mut x_cnt: u32 = 0;
-          for b in 0..e_cnt {
-            if *c_ptr > mask {
-              idx_max |= b - prev;
-              prev = b;
-              x_cnt += 1;
-            }
+          blk_max = 0;
+          for _ in 0..e_cnt {
+            blk_max |= *c_ptr;
             c_ptr = c_ptr.offset(1);
           }
-          let i_wd: u32 = idx_max.bits();
-
-          let wrd: u64 = (
-            utility::words_for_bits(e_wd * e_cnt as u32) +
-            utility::words_for_bits(i_wd * x_cnt) +
-            utility::words_for_bits(x_wd * x_cnt)) as u64;
-
-          *e_wd_ptr.offset(a as isize) = e_wd;
-          *x_wd_ptr.offset(a as isize) = x_wd;
-          *i_wd_ptr.offset(a as isize) = i_wd;
-          *wrd_ptr.offset(a as isize) = wrd as u64;
+          *e_wd_ptr.offset(a as isize) = blk_max.bits();
         }
-        words.set_len(n_blks + 1);
+        e_widths.set_len(n_blks + 1);
         c_ptr = scratch.as_mut_ptr();
 
         // Construct index header
@@ -1044,29 +893,30 @@ macro_rules! encodable_signed {
           for b in (0..(length as isize)).map(|x| x << (a + 1)) {
             let mut acc: u64 = 0;
             for c in 0..(1 << a) {
-              acc += *wrd_ptr.offset(b + c);
+              acc += *e_wd_ptr.offset(b + c) as u64;
             }
             lvl.push(acc);
           }
           lvls.push(lvl);
         }
-
+        
         // Lengths of index header and blocks
-        let base_wd: u32 = ty_wd.bits() + 2;
+        let base_wd: u32 = ty_wd.bits();
         let mut h_words: usize = 0;
         for (a, x) in lvls.iter().enumerate() {
           let bits: u32 = (base_wd + a as u32) * x.len() as u32;
           h_words += utility::words_for_bits(bits);
         }
-        let b_words: usize = words.iter().sum::<u64>() as usize +
-          (n_blks + 1) * (1 + utility::words_for_bits(ty_wd));
+        let b_words: usize = (n_blks + 1) * (1 + ty_wrd) +
+          4 * e_widths[..n_blks].iter().sum::<u32>() as usize +
+          utility::words_for_bits(e_counts[n_blks] as u32 * e_widths[n_blks]);
 
         // Construct storage
         let s_len: usize = 1 + h_words + b_words;
         let mut storage: Vec<u32> = Vec::with_capacity(s_len);
         let mut s_ptr: *mut u32 = storage.as_mut_ptr();
 
-        // Write Patched header
+        // Write Uniform header
         *s_ptr =
           (n_blks as u32) << 2 |
           flag;
@@ -1085,64 +935,36 @@ macro_rules! encodable_signed {
           }
 
           let l_left: usize = lvl.len() - (l_blks << 7);
-          s_ptr = Patched::<u64>::_encode_tail(l_ptr, s_ptr, l_left, l_wd);
+          s_ptr = Uniform::<u64>::_encode_tail(l_ptr, s_ptr, l_left, l_wd);
         }
 
         // Write the input
-        let mut exceptions: [$ut; 127] = [0; 127];
-        let mut indices: [u8; 127] = [0; 127];
-        let exc_ptr: *mut $ut = exceptions.as_mut_ptr();
-        let idx_ptr: *mut u8 = indices.as_mut_ptr();
-
         for (a, &e_cnt) in e_counts.iter().enumerate() {
           let e_wd: u32 = *e_wd_ptr.offset(a as isize);
-          let x_wd: u32 = *x_wd_ptr.offset(a as isize);
-          let i_wd: u32 = *i_wd_ptr.offset(a as isize);
 
-          // Find exceptions and indices
-          let mask: $ut = { if e_wd > 0 { !0 >> (ty_wd - e_wd) } else { 0 } };
-          let mut prev: isize = 0;
-          let mut x_cnt: usize = 0;
-          for b in 0..(e_cnt as isize) {
-            if *c_ptr.offset(b) > mask {
-              *exc_ptr.offset(x_cnt as isize) = *c_ptr.offset(b) >> e_wd;
-              *c_ptr.offset(b) &= mask;
-              *idx_ptr.offset(x_cnt as isize) = (b - prev) as u8;
-              prev = b;
-              x_cnt += 1;
-            }
-          }
-          
           // Write block header
           *s_ptr = 
-            i_wd << 29 |
-            (x_cnt as u32) << 22 |
-            x_wd << 15 |
             (e_cnt as u32) << 7 |
             e_wd;
           s_ptr = s_ptr.offset(1);
 
           // Write the block
-          s_ptr = Patched::<$ut>::_encode_tail(c_ptr, s_ptr, e_cnt, e_wd);
-          c_ptr = c_ptr.offset(128);
-          if x_cnt > 0 {
-            s_ptr = Patched::<u8>::_encode_tail(idx_ptr, s_ptr, x_cnt, i_wd);
-            s_ptr = Patched::<$ut>::_encode_tail(exc_ptr, s_ptr, x_cnt, x_wd);
-          }
+          s_ptr = Uniform::<$ut>::_encode_tail(c_ptr, s_ptr, e_cnt, e_wd);
+          c_ptr = c_ptr.offset(e_cnt as isize);
 
           // Write the shift. Notice that some bits can be left unitialized.
           *(s_ptr as *mut $ut) = *shift_ptr.offset(a as isize);
           s_ptr = s_ptr.offset(ty_wrd as isize);
         }
 
-        // Set storage length AFTER everything is initialized
+        // Set the length of storage AFTER everything is initialized
         storage.set_len(s_len);
         Ok(storage)
       }
 
       #[inline]
       unsafe fn _decode(storage: &[u32]) -> Result<Vec<$it>, super::Error> {
-        let scratch: Vec<$ut> = try!(Patched::<$ut>::_decode(storage));
+        let scratch: Vec<$ut> = try!(Uniform::<$ut>::_decode(storage));
         Ok(mem::transmute(scratch))
       }
     }
@@ -1150,36 +972,36 @@ macro_rules! encodable_signed {
 }
 
 encodable_signed!{
-  (i8: u8, encode_zz_shift_u8)
-  (i16: u16, encode_zz_shift_u16)
-  (i32: u32, encode_zz_shift_u32)
-  (i64: u64, encode_zz_shift_u64)
+  (i8: u8, encode_shift_u8)
+  (i16: u16, encode_shift_u16)
+  (i32: u32, encode_shift_u32)
+  (i64: u64, encode_shift_u64)
 }
 
 #[cfg(target_pointer_width = "32")]
-impl EncodablePrivate<isize> for Patched<isize> {
+impl EncodablePrivate<isize> for Uniform<isize> {
   #[inline]
   unsafe fn _encode(storage: &[isize]) -> Result<Vec<u32>, super::Error> {
-    Patched::<i32>::_encode(mem::transmute(storage))
+    Uniform::<i32>::_encode(mem::transmute(storage))
   }
 
   #[inline]
   unsafe fn _decode(storage: &[u32]) -> Result<Vec<isize>, super::Error> {
-    let scratch: Vec<u32> = try!(Patched::<u32>::_decode(storage));
+    let scratch: Vec<u32> = try!(Uniform::<u32>::_decode(storage));
     Ok(mem::transmute(scratch))
   }
 }
 
 #[cfg(target_pointer_width = "64")]
-impl EncodablePrivate<isize> for Patched<isize> {
+impl EncodablePrivate<isize> for Uniform<isize> {
   #[inline]
   unsafe fn _encode(storage: &[isize]) -> Result<Vec<u32>, super::Error> {
-    Patched::<i64>::_encode(mem::transmute(storage))
+    Uniform::<i64>::_encode(mem::transmute(storage))
   }
 
   #[inline]
   unsafe fn _decode(storage: &[u32]) -> Result<Vec<isize>, super::Error> {
-    let scratch: Vec<u64> = try!(Patched::<u64>::_decode(storage));
+    let scratch: Vec<u64> = try!(Uniform::<u64>::_decode(storage));
     Ok(mem::transmute(scratch))
   }
 }
@@ -1200,7 +1022,7 @@ trait AccessPrivate<Idx> {
 
 macro_rules! access_default {
   ($(($idx: ty, $output: ty))*) => ($(
-    impl<B: Bits> AccessPrivate<$idx> for Patched<B> {
+    impl<B: Bits> AccessPrivate<$idx> for Uniform<B> {
       type Output = $output;
 
       default unsafe fn _access(_: &[u32], _: $idx) -> $output {
@@ -1218,12 +1040,12 @@ access_default!{
 
 macro_rules! access {
   ($(($idx: ty, $output: ty))*) => ($(
-    impl<B: Bits> Access<$idx> for Patched<B> {
+    impl<B: Bits> Access<$idx> for Uniform<B> {
       type Output = $output;
 
       #[inline]
       fn access(&self, index: $idx) -> $output {
-        unsafe { Patched::<B>::_access(&*self.storage, index) }
+        unsafe { Uniform::<B>::_access(&*self.storage, index) }
       }
     }
   )*)
@@ -1235,7 +1057,7 @@ access!{
   (ops::RangeFrom<usize>, Vec<B>)
 }
 
-impl<B: Bits> Access<ops::RangeTo<usize>> for Patched<B> {
+impl<B: Bits> Access<ops::RangeTo<usize>> for Uniform<B> {
   type Output = Vec<B>;
 
   #[inline]
@@ -1244,7 +1066,7 @@ impl<B: Bits> Access<ops::RangeTo<usize>> for Patched<B> {
   }
 }
 
-impl<B: Bits> Access<ops::RangeFull> for Patched<B> {
+impl<B: Bits> Access<ops::RangeFull> for Uniform<B> {
   type Output = Vec<B>;
 
   #[inline]
@@ -1253,7 +1075,7 @@ impl<B: Bits> Access<ops::RangeFull> for Patched<B> {
   }
 }
 
-impl<B: Bits> Access<ops::RangeInclusive<usize>> for Patched<B> {
+impl<B: Bits> Access<ops::RangeInclusive<usize>> for Uniform<B> {
   type Output = Vec<B>;
 
   #[inline]
@@ -1268,7 +1090,7 @@ impl<B: Bits> Access<ops::RangeInclusive<usize>> for Patched<B> {
   }
 }
 
-impl<B: Bits> Access<ops::RangeToInclusive<usize>> for Patched<B> {
+impl<B: Bits> Access<ops::RangeToInclusive<usize>> for Uniform<B> {
   type Output = Vec<B>;
 
   #[inline]
@@ -1280,8 +1102,10 @@ impl<B: Bits> Access<ops::RangeToInclusive<usize>> for Patched<B> {
 /// Calculates the offset in words to the start of the block. Not intended to
 /// be used outside the implementation of `Access`.
 fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> usize {
+  let ty_wrd: usize = utility::words_for_bits(ty_wd);
+
   // Find the block containing the index
-  let base_wd: u32 = ty_wd.bits() + 2;
+  let base_wd: u32 = ty_wd.bits();
   let mut lvl: u32 = 0;
   let mut lvl_head: usize = 1;
   let mut wrd_to_blk: usize = 0;
@@ -1291,7 +1115,7 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
     let mut w_idx: usize = blk;
     let mut output: u64;
 
-    // Initial iteration moved out of loop to avoid branching
+    // Initial iteration moved out of loop to avoid branch
     let shift: u32 = w_idx.trailing_zeros() + 1;
     for _ in 1..shift {
       let l_wd: u32 = base_wd + lvl;
@@ -1367,11 +1191,11 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
           }
         } else {
           // Width encoded using u32
-          let l_bits: u32 = w_idx as u32 * l_wd;
-          let mut s_bits: u32 = 32 - (l_bits & 31);
+          let bits: u32 = w_idx as u32 * l_wd;
+          let mut s_bits: u32 = 32 - (bits & 31);
           let mut o_bits: u32 = l_wd;
 
-          s_ptr = s_ptr.offset((l_bits / 32) as isize);
+          s_ptr = s_ptr.offset((bits / 32) as isize);
 
           output = (*s_ptr >> (32 - s_bits)) as u64;
           while o_bits > s_bits {
@@ -1384,7 +1208,7 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
       }
       wrd_to_blk += (output & (!0 >> (64 - l_wd))) as usize;
     }
-    wrd_to_blk += blk * (1 + utility::words_for_bits(ty_wd));
+    wrd_to_blk = blk * (1 + ty_wrd) + 4 * wrd_to_blk;
   }
 
   // Include the header words
@@ -1399,8 +1223,8 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
 }
 
 macro_rules! access_unsigned {
-  ($(($ty: ident: $step: expr, $dec: ident, $dec_simd: ident, $dec_zz: ident))*) => ($(
-    impl AccessPrivate<usize> for Patched<$ty> {
+  ($(($ty: ident: $step: expr, $dec: ident, $dec_simd: ident, $dec_shift: ident))*) => ($(
+    impl AccessPrivate<usize> for Uniform<$ty> {
       unsafe fn _access(storage: &[u32], index: usize) -> $ty {
         if storage.is_empty() {
           panic!(format!("index is {} but length is 0", index))
@@ -1423,9 +1247,6 @@ macro_rules! access_unsigned {
 
         let e_wd: u32 = *s_ptr & E_WIDTH;
         let left: usize = ((*s_ptr & E_COUNT) >> 7) as usize;
-        let x_wd: u32 = (*s_ptr & X_WIDTH) >> 15;
-        let x_cnt: usize = ((*s_ptr & X_COUNT) >> 22) as usize;
-        let i_wd: u32 = (*s_ptr & I_WIDTH) >> 29;
         s_ptr = s_ptr.offset(1);
 
         let idx: u8 = (index & 127) as u8;
@@ -1474,45 +1295,12 @@ macro_rules! access_unsigned {
         }
         output &= !0 >> (ty_wd - e_wd);
 
-        if x_cnt > 0 {
-          let mut indices: Vec<u8> = Vec::with_capacity(x_cnt);
-          let idx_ptr: *mut u8 = indices.as_mut_ptr();
-          s_ptr = Patched::<u8>::_decode_tail(s_ptr, idx_ptr, x_cnt, i_wd);
-
-          let mut acc: u8 = 0;
-          for a in 0..(x_cnt as isize) {
-            acc += *idx_ptr.offset(a);
-            if acc > idx { break }
-            if acc == idx {
-              let mut exception: $ty;
-
-              let x_bits: u32 = a as u32 * x_wd;
-              let mut s_bits: u32 = 32 - (x_bits & 31);
-              let mut o_bits: u32 = x_wd;
-
-              let mut x_ptr: *const u32 = s_ptr.offset((x_bits / 32) as isize);
-              exception = (*x_ptr >> (32 - s_bits)) as $ty;
-              while o_bits > s_bits {
-                o_bits -= s_bits;
-                x_ptr = x_ptr.offset(1);
-                exception |= (*x_ptr as $ty) << (e_wd - o_bits);
-                s_bits = 32;
-              }
-              exception &= !0 >> (ty_wd - x_wd);
-              output |= exception << e_wd;
-              break
-            }
-          }
-          s_ptr = s_ptr.offset(utility::words_for_bits(x_wd * x_cnt as u32) as isize);
-        }
-
         let shift: $ty = *(s_ptr as *const $ty);
-        let xor: $ty = (0 as $ty).wrapping_sub(output & 1);
-        ((output >> 1) ^ xor).wrapping_add(shift)
+        output.wrapping_add(shift)
       }
     }
 
-    impl AccessPrivate<ops::Range<usize>> for Patched<$ty> {
+    impl AccessPrivate<ops::Range<usize>> for Uniform<$ty> {
       unsafe fn _access(storage: &[u32], range: ops::Range<usize>) -> Vec<$ty> {
         if range.end < range.start {
           panic!(format!("range start is {} but range end is {}", range.start, range.end))
@@ -1551,36 +1339,19 @@ macro_rules! access_unsigned {
         // Start block known, decode the range
         s_ptr = storage.as_ptr().offset(wrd_to_blk as isize);
 
-        let mut exceptions: Vec<$ty> = Vec::with_capacity(127);
-        let mut indices: Vec<u8> = Vec::with_capacity(127);
-        let exp_ptr: *mut $ty = exceptions.as_mut_ptr();
-        let idx_ptr: *mut u8 = indices.as_mut_ptr();
-
         // Block size is known for all but the final block
         for _ in 0..(e_blk - s_blk) {
           // Find the width of the block
           let e_wd: u32 = *s_ptr & E_WIDTH;
-          let x_wd: u32 = (*s_ptr & X_WIDTH) >> 15;
-          let x_cnt: usize = ((*s_ptr & X_COUNT) >> 22) as usize;
-          let i_wd: u32 = (*s_ptr & I_WIDTH) >> 29;
           s_ptr = s_ptr.offset(1);
 
           // Decode the block
           mayda_codec::$dec_simd[e_wd as usize](s_ptr, o_ptr);
           s_ptr = s_ptr.offset(4 * e_wd as isize);
-          if x_cnt > 0 {
-            s_ptr = Patched::<u8>::_decode_tail(s_ptr, idx_ptr, x_cnt, i_wd);
-            s_ptr = Patched::<$ty>::_decode_tail(s_ptr, exp_ptr, x_cnt, x_wd);
-            let mut idx: u8 = 0;
-            for a in 0..(x_cnt as isize) {
-              idx += *idx_ptr.offset(a);
-              *o_ptr.offset(idx as isize) |= *exp_ptr.offset(a) << e_wd;
-            }
-          }
 
           let shift: $ty = *(s_ptr as *const $ty);
           s_ptr = s_ptr.offset(ty_wrd as isize);
-          mayda_codec::$dec_zz(o_ptr, 128, shift);
+          mayda_codec::$dec_shift(o_ptr, 128, shift);
 
           o_ptr = o_ptr.offset(128);
         }
@@ -1588,9 +1359,6 @@ macro_rules! access_unsigned {
         // Final block
         let e_wd: u32 = *s_ptr & E_WIDTH;
         let left: usize = ((*s_ptr & E_COUNT) >> 7) as usize;
-        let x_wd: u32 = (*s_ptr & X_WIDTH) >> 15;
-        let x_cnt: usize = ((*s_ptr & X_COUNT) >> 22) as usize;
-        let i_wd: u32 = (*s_ptr & I_WIDTH) >> 29;
         s_ptr = s_ptr.offset(1);
 
         // Checks a lower bound on the length
@@ -1606,19 +1374,10 @@ macro_rules! access_unsigned {
         }
 
         // Decode final block
-        s_ptr = Patched::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
-        if x_cnt > 0 {
-          s_ptr = Patched::<u8>::_decode_tail(s_ptr, idx_ptr, x_cnt, i_wd);
-          s_ptr = Patched::<$ty>::_decode_tail(s_ptr, exp_ptr, x_cnt, x_wd);
-          let mut idx: u8 = 0;
-          for a in 0..(x_cnt as isize) {
-            idx += *idx_ptr.offset(a);
-            *o_ptr.offset(idx as isize) |= *exp_ptr.offset(a) << e_wd;
-          }
-        }
+        s_ptr = Uniform::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
 
         let shift: $ty = *(s_ptr as *const $ty);
-        mayda_codec::$dec_zz(o_ptr, left, shift);
+        mayda_codec::$dec_shift(o_ptr, left, shift);
 
         // Shift the entries into the desired range
         let sft: usize = range.start - (s_blk << 7);
@@ -1631,7 +1390,7 @@ macro_rules! access_unsigned {
       }
     }
 
-    impl AccessPrivate<ops::RangeFrom<usize>> for Patched<$ty> {
+    impl AccessPrivate<ops::RangeFrom<usize>> for Uniform<$ty> {
       unsafe fn _access(storage: &[u32], range: ops::RangeFrom<usize>) -> Vec<$ty> {
         if storage.is_empty() {
           if range.start > 0 {
@@ -1659,36 +1418,19 @@ macro_rules! access_unsigned {
         // Start block known, decode the range
         s_ptr = storage.as_ptr().offset(wrd_to_blk as isize);
 
-        let mut exceptions: Vec<$ty> = Vec::with_capacity(127);
-        let mut indices: Vec<u8> = Vec::with_capacity(127);
-        let exp_ptr: *mut $ty = exceptions.as_mut_ptr();
-        let idx_ptr: *mut u8 = indices.as_mut_ptr();
-
         // Block size is known for all but the final block
         for _ in 0..(n_blks - s_blk) {
           // Find the width of the block
           let e_wd: u32 = *s_ptr & E_WIDTH;
-          let x_wd: u32 = (*s_ptr & X_WIDTH) >> 15;
-          let x_cnt: usize = ((*s_ptr & X_COUNT) >> 22) as usize;
-          let i_wd: u32 = (*s_ptr & I_WIDTH) >> 29;
           s_ptr = s_ptr.offset(1);
 
           // Decode the block
           mayda_codec::$dec_simd[e_wd as usize](s_ptr, o_ptr);
           s_ptr = s_ptr.offset(4 * e_wd as isize);
-          if x_cnt > 0 {
-            s_ptr = Patched::<u8>::_decode_tail(s_ptr, idx_ptr, x_cnt, i_wd);
-            s_ptr = Patched::<$ty>::_decode_tail(s_ptr, exp_ptr, x_cnt, x_wd);
-            let mut idx: u8 = 0;
-            for a in 0..(x_cnt as isize) {
-              idx += *idx_ptr.offset(a);
-              *o_ptr.offset(idx as isize) |= *exp_ptr.offset(a) << e_wd;
-            }
-          }
 
           let shift: $ty = *(s_ptr as *const $ty);
           s_ptr = s_ptr.offset(ty_wrd as isize);
-          mayda_codec::$dec_zz(o_ptr, 128, shift);
+          mayda_codec::$dec_shift(o_ptr, 128, shift);
 
           o_ptr = o_ptr.offset(128);
         }
@@ -1696,9 +1438,6 @@ macro_rules! access_unsigned {
         // Final block
         let e_wd: u32 = *s_ptr & E_WIDTH;
         let left: usize = ((*s_ptr & E_COUNT) >> 7) as usize;
-        let x_wd: u32 = (*s_ptr & X_WIDTH) >> 15;
-        let x_cnt: usize = ((*s_ptr & X_COUNT) >> 22) as usize;
-        let i_wd: u32 = (*s_ptr & I_WIDTH) >> 29;
         s_ptr = s_ptr.offset(1);
 
         // Check a lower bound on the length
@@ -1711,19 +1450,10 @@ macro_rules! access_unsigned {
         }
 
         // Decode final block
-        s_ptr = Patched::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
-        if x_cnt > 0 {
-          s_ptr = Patched::<u8>::_decode_tail(s_ptr, idx_ptr, x_cnt, i_wd);
-          s_ptr = Patched::<$ty>::_decode_tail(s_ptr, exp_ptr, x_cnt, x_wd);
-          let mut idx: u8 = 0;
-          for a in 0..(x_cnt as isize) {
-            idx += *idx_ptr.offset(a);
-            *o_ptr.offset(idx as isize) |= *exp_ptr.offset(a) << e_wd;
-          }
-        }
+        s_ptr = Uniform::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
 
         let shift: $ty = *(s_ptr as *const $ty);
-        mayda_codec::$dec_zz(o_ptr, left, shift);
+        mayda_codec::$dec_shift(o_ptr, left, shift);
 
         // Shift the entries into the desired range
         let sft: usize = range.start - (s_blk << 7);
@@ -1739,32 +1469,32 @@ macro_rules! access_unsigned {
 }
 
 access_unsigned!{
-  (u8: 8, DECODE_U8, DECODE_SIMD_U8, decode_zz_shift_u8)
-  (u16: 8, DECODE_U16, DECODE_SIMD_U16, decode_zz_shift_u16)
-  (u32: 8, DECODE_U32, DECODE_SIMD_U32, decode_zz_shift_u32)
-  (u64: 8, DECODE_U64, DECODE_SIMD_U64, decode_zz_shift_u64)
+  (u8: 8, DECODE_U8, DECODE_SIMD_U8, decode_shift_u8)
+  (u16: 8, DECODE_U16, DECODE_SIMD_U16, decode_shift_u16)
+  (u32: 8, DECODE_U32, DECODE_SIMD_U32, decode_shift_u32)
+  (u64: 8, DECODE_U64, DECODE_SIMD_U64, decode_shift_u64)
 }
 
 macro_rules! access_signed {
   ($(($it: ident, $ut: ident))*) => ($(
-    impl AccessPrivate<usize> for Patched<$it> {
+    impl AccessPrivate<usize> for Uniform<$it> {
       #[inline]
       unsafe fn _access(storage: &[u32], index: usize) -> $it {
-        Patched::<$ut>::_access(storage, index) as $it
+        Uniform::<$ut>::_access(storage, index) as $it
       }
     }
 
-    impl AccessPrivate<ops::Range<usize>> for Patched<$it> {
+    impl AccessPrivate<ops::Range<usize>> for Uniform<$it> {
       #[inline]
       unsafe fn _access(storage: &[u32], range: ops::Range<usize>) -> Vec<$it> {
-        mem::transmute(Patched::<$ut>::_access(storage, range))
+        mem::transmute(Uniform::<$ut>::_access(storage, range))
       }
     }
 
-    impl AccessPrivate<ops::RangeFrom<usize>> for Patched<$it> {
+    impl AccessPrivate<ops::RangeFrom<usize>> for Uniform<$it> {
       #[inline]
       unsafe fn _access(storage: &[u32], range: ops::RangeFrom<usize>) -> Vec<$it> {
-        mem::transmute(Patched::<$ut>::_access(storage, range))
+        mem::transmute(Uniform::<$ut>::_access(storage, range))
       }
     }
   )*)

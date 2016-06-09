@@ -26,7 +26,7 @@ pub trait Bits {
   fn width() -> u32;
 
   /// Number of bits required to represent the number in binary. Notice that
-  /// `0.bits() == 0u32`.
+  /// `0.bits() == 0u32` intentionally.
   fn bits(&self) -> u32;
 }
 
@@ -57,9 +57,9 @@ bits_impl!{
 
 /// Indicates that the type can be encoded and decoded by `mayda`.
 ///
-/// The default implementations of encode and decode returns an error to
+/// The default implementations of `encode` and `decode` return errors to
 /// indicate that there is no available specialization for the type. This
-/// should not happen unless the user implements `Bits` for some other type, or
+/// should not happen unless the user implements `Bits` for some other type or
 /// there is a library bug.
 pub trait Encodable<B: Bits> {
   /// Encodes the slice in the `Encodable` object.
@@ -70,18 +70,17 @@ pub trait Encodable<B: Bits> {
   fn decode(&self) -> Result<Vec<B>, super::Error>;
 }
 
-/// A trait for indexing an encoded vector type that is similar to but less
-/// convenient than `Index`. `Index::index()` returns a reference, but an
-/// encoded vector type must give ownership of the returned value to the caller.
+/// A trait for indexing an encoded vector. Similar to but less convenient than
+/// `Index`. `Index::index()` returns a reference, but an encoded vector type
+/// must give ownership of the returned value to the caller.
 ///
 /// # Panics
 ///
-/// All implementations panic when the index is out of bounds.
+/// By convention, all implementations panic when the index is out of bounds.
 ///
-/// The default implementations of encode and decode panic to indicate that
-/// there is no available specialization for the type. This should not happen
-/// unless the user implements `Bits` for some other type, or there is a
-/// library bug.
+/// The default implementations of `access` panic to indicate that there is no
+/// available specialization for the type. This should not happen unless the
+/// user implements `Bits` for some other type or there is a library bug.
 pub trait Access<Idx> {
   /// The type returned by the access operation.
   type Output;
@@ -95,15 +94,16 @@ pub trait Access<Idx> {
 ///
 /// # Panics
 ///
-/// Integer overflow occurs when the value of bits is above `usize::MAX - 31`.
+/// Integer overflow occurs when the value of bits is above `u32::MAX - 31`.
 /// This should not happen in `mayda` since this function is only used to find
-/// the number of words required for a block of up to 128 integers.
+/// the number of words required for an encoded block of up to 128 integers.
 ///
 /// # Examples
 ///
 /// ```
 /// use std::mem;
 /// use mayda::utility::words_for_bits;
+/// 
 /// let words = words_for_bits(13 * (mem::size_of::<u8>() * 8) as u32);
 /// assert_eq!(4, words);
 /// ```

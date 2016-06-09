@@ -8,4 +8,5 @@ name = "mayda"
 
 [dependencies]
 mayda_codec = { path = "mayda_codec", version = "0.1.0" }
+num = "0.1"
 rand = "0.3"
