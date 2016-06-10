@@ -5,7 +5,6 @@
 // or distributed except according to those terms.
 
 #![feature(test)]
-#![feature(inclusive_range_syntax)]
 
 #![allow(non_snake_case)]
 
@@ -13,8 +12,7 @@ extern crate mayda;
 extern crate rand;
 extern crate test;
 
-use mayda::utility::{Access, Encodable};
-use mayda::uniform::Uniform;
+use mayda::{Access, Encodable, Uniform};
 use rand::distributions::{IndependentSample, Range};
 use test::Bencher;
 

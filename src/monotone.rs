@@ -5,16 +5,15 @@
 // or distributed except according to those terms.
 
 //! `Monotone` encoding of integer arrays. Intended for cases where the entries
-//! are monotonically increasing. Implemented for all primitive integer types.
+//! are monotonically increasing. Implemented for all primitive integer types.  
 //!
-//! Faster than `Unimodal`, but slower than `Uniform`. Compression decays with
-//! the maximum magnitude of the difference of successive entries.
+//! Compression decays with the maximum magnitude of the difference of
+//! successive entries.
 //!
 //! # Examples
 //!
 //! ```
-//! use mayda::utility::{Access, Encodable};
-//! use mayda::monotone::Monotone;
+//! use mayda::{Access, Encodable, Monotone};
 //!
 //! let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
 //! let mut bits = Monotone::new();
@@ -50,8 +49,7 @@ const E_COUNT: u32 = 0x00007f80;
 /// # Examples
 ///
 /// ```
-/// use mayda::utility::{Access, Encodable};
-/// use mayda::monotone::Monotone;
+/// use mayda::{Access, Encodable, Monotone};
 ///
 /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
 /// let mut bits = Monotone::new();
@@ -82,9 +80,9 @@ const E_COUNT: u32 = 0x00007f80;
 /// # Performance
 ///
 /// Decoding does not allocate except for the return value, and decodes around
-/// 8 GiB/s of decoded integers. Encoding allocates `O(n)` memory (`n` in the
-/// length of the array), and encodes around 5 GiB/s of decoded integers.
-/// Run `cargo bench --bench monotone` for performance numbers on your setup.
+/// 7.5 GiB/s of decoded integers. Encoding allocates `O(n)` memory (`n` in the
+/// length of the array), and encodes around 4.5 GiB/s of decoded integers. Run
+/// `cargo bench --bench monotone` for performance numbers on your setup.
 ///
 /// The performance (speed and compression) degrades gradually as the number of
 /// entries falls below 128.
@@ -97,6 +95,8 @@ const E_COUNT: u32 = 0x00007f80;
 /// A `Monotone` object performs unsafe pointer operations during encoding and
 /// decoding. Changing the header information with `mut_storage()` can cause
 /// data to be written to or read from arbitrary addresses in memory.
+///
+/// That said, the situation is the same for `Vec`.
 ///
 /// # Algorithm
 ///
@@ -320,7 +320,7 @@ macro_rules! encodable_unsigned {
   ($(($ty: ident: $step: expr,
       $enc: ident, $dec: ident,
       $enc_simd: ident, $dec_simd: ident,
-      $enc_delta: ident, $dec_delta: ident))*) => ($(
+      $enc_delta: ident))*) => ($(
     impl EncodablePrivate<$ty> for Monotone<$ty> {
       unsafe fn _encode(input: &[$ty]) -> Result<Vec<u32>, super::Error> {
         // Nothing to do
@@ -490,11 +490,14 @@ macro_rules! encodable_unsigned {
           mayda_codec::$dec_simd[e_wd as usize](s_ptr, o_ptr);
           s_ptr = s_ptr.offset(4 * e_wd as isize);
 
-          let shift: $ty = *(s_ptr as *const $ty);
+          let mut acc: $ty = *(s_ptr as *const $ty);
           s_ptr = s_ptr.offset(ty_wrd as isize);
-          mayda_codec::$dec_delta(o_ptr, 128, shift);
 
-          o_ptr = o_ptr.offset(128);
+          for _ in 0..128 {
+            acc = acc.wrapping_add(*o_ptr);
+            *o_ptr = acc;
+            o_ptr = o_ptr.offset(1);
+          }
         }
 
         // Final block
@@ -504,8 +507,12 @@ macro_rules! encodable_unsigned {
 
         s_ptr = Monotone::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
 
-        let shift: $ty = *(s_ptr as *const $ty);
-        mayda_codec::$dec_delta(o_ptr, left, shift);
+        let mut acc: $ty = *(s_ptr as *const $ty);
+        for _ in 0..left {
+          acc = acc.wrapping_add(*o_ptr);
+          *o_ptr = acc;
+          o_ptr = o_ptr.offset(1);
+        }
 
         // Set the length of output AFTER everything is initialized
         output.set_len((n_blks << 7) + left);
@@ -608,7 +615,7 @@ macro_rules! encodable_unsigned {
             }
           }
         }
-        return { if s_bits < 32 { s_ptr.offset(1) } else { s_ptr } }
+        if s_bits < 32 { s_ptr.offset(1) } else { s_ptr }
       }
 
       unsafe fn _decode_tail(s_ptr: *const u32,
@@ -745,7 +752,7 @@ macro_rules! encodable_unsigned {
 
           *o_ptr &= mask;
         }
-        return { if s_bits < 32 { s_ptr.offset(1) } else { s_ptr } }
+        if s_bits < 32 { s_ptr.offset(1) } else { s_ptr }
       }
     }
   )*)
@@ -755,19 +762,19 @@ encodable_unsigned!{
   (u8: 8,
    ENCODE_U8, DECODE_U8,
    ENCODE_SIMD_U8, DECODE_SIMD_U8,
-   encode_delta_u8, decode_delta_u8)
+   encode_delta_u8)
   (u16: 8,
    ENCODE_U16, DECODE_U16,
    ENCODE_SIMD_U16, DECODE_SIMD_U16,
-   encode_delta_u16, decode_delta_u16)
+   encode_delta_u16)
   (u32: 8,
    ENCODE_U32, DECODE_U32,
    ENCODE_SIMD_U32, DECODE_SIMD_U32,
-   encode_delta_u32, decode_delta_u32)
+   encode_delta_u32)
   (u64: 8,
    ENCODE_U64, DECODE_U64,
    ENCODE_SIMD_U64, DECODE_SIMD_U64,
-   encode_delta_u64, decode_delta_u64)
+   encode_delta_u64)
 }
 
 #[cfg(target_pointer_width = "32")]
@@ -1200,7 +1207,7 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
 }
 
 macro_rules! access_unsigned {
-  ($(($ty: ident: $step: expr, $dec: ident, $dec_simd: ident, $dec_delta: ident))*) => ($(
+  ($(($ty: ident: $step: expr, $dec: ident, $dec_simd: ident))*) => ($(
     impl AccessPrivate<usize> for Monotone<$ty> {
       unsafe fn _access(storage: &[u32], index: usize) -> $ty {
         if storage.is_empty() {
@@ -1237,10 +1244,11 @@ macro_rules! access_unsigned {
 
         s_ptr = Monotone::<$ty>::_decode_tail(s_ptr, c_ptr, left, e_wd);
 
-        let shift: $ty = *(s_ptr as *const $ty);
-        mayda_codec::$dec_delta(c_ptr, left, shift);
-
-        *c_ptr.offset(idx as isize)
+        let mut acc: $ty = *(s_ptr as *const $ty);
+        for a in 1..(idx as isize + 1) {
+          acc = acc.wrapping_add(*c_ptr.offset(a));
+        }
+        acc
       }
     }
 
@@ -1293,11 +1301,14 @@ macro_rules! access_unsigned {
           mayda_codec::$dec_simd[e_wd as usize](s_ptr, o_ptr);
           s_ptr = s_ptr.offset(4 * e_wd as isize);
 
-          let shift: $ty = *(s_ptr as *const $ty);
+          let mut acc: $ty = *(s_ptr as *const $ty);
           s_ptr = s_ptr.offset(ty_wrd as isize);
-          mayda_codec::$dec_delta(o_ptr, 128, shift);
 
-          o_ptr = o_ptr.offset(128);
+          for _ in 0..128 {
+            acc = acc.wrapping_add(*o_ptr);
+            *o_ptr = acc;
+            o_ptr = o_ptr.offset(1);
+          }
         }
 
         // Final block
@@ -1320,8 +1331,12 @@ macro_rules! access_unsigned {
         // Decode final block
         s_ptr = Monotone::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
 
-        let shift: $ty = *(s_ptr as *const $ty);
-        mayda_codec::$dec_delta(o_ptr, left, shift);
+        let mut acc: $ty = *(s_ptr as *const $ty);
+        for _ in 0..left {
+          acc = acc.wrapping_add(*o_ptr);
+          *o_ptr = acc;
+          o_ptr = o_ptr.offset(1);
+        }
 
         // Shift the entries into the desired range
         let sft: usize = range.start - (s_blk << 7);
@@ -1372,11 +1387,14 @@ macro_rules! access_unsigned {
           mayda_codec::$dec_simd[e_wd as usize](s_ptr, o_ptr);
           s_ptr = s_ptr.offset(4 * e_wd as isize);
 
-          let shift: $ty = *(s_ptr as *const $ty);
+          let mut acc: $ty = *(s_ptr as *const $ty);
           s_ptr = s_ptr.offset(ty_wrd as isize);
-          mayda_codec::$dec_delta(o_ptr, 128, shift);
 
-          o_ptr = o_ptr.offset(128);
+          for _ in 0..128 {
+            acc = acc.wrapping_add(*o_ptr);
+            *o_ptr = acc;
+            o_ptr = o_ptr.offset(1);
+          }
         }
 
         // Final block
@@ -1396,8 +1414,12 @@ macro_rules! access_unsigned {
         // Decode final block
         s_ptr = Monotone::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
 
-        let shift: $ty = *(s_ptr as *const $ty);
-        mayda_codec::$dec_delta(o_ptr, left, shift);
+        let mut acc: $ty = *(s_ptr as *const $ty);
+        for _ in 0..left {
+          acc = acc.wrapping_add(*o_ptr);
+          *o_ptr = acc;
+          o_ptr = o_ptr.offset(1);
+        }
 
         // Shift the entries into the desired range
         let sft: usize = range.start - (s_blk << 7);
@@ -1413,10 +1435,10 @@ macro_rules! access_unsigned {
 }
 
 access_unsigned!{
-  (u8: 8, DECODE_U8, DECODE_SIMD_U8, decode_delta_u8)
-  (u16: 8, DECODE_U16, DECODE_SIMD_U16, decode_delta_u16)
-  (u32: 8, DECODE_U32, DECODE_SIMD_U32, decode_delta_u32)
-  (u64: 8, DECODE_U64, DECODE_SIMD_U64, decode_delta_u64)
+  (u8: 8, DECODE_U8, DECODE_SIMD_U8)
+  (u16: 8, DECODE_U16, DECODE_SIMD_U16)
+  (u32: 8, DECODE_U32, DECODE_SIMD_U32)
+  (u64: 8, DECODE_U64, DECODE_SIMD_U64)
 }
 
 macro_rules! access_signed {

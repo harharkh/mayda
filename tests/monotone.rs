@@ -11,8 +11,7 @@
 extern crate mayda;
 extern crate rand;
 
-use mayda::utility::{Encodable, Access};
-use mayda::monotone::Monotone;
+use mayda::{Access, Encodable, Monotone};
 use rand::distributions::{IndependentSample, Range};
 
 fn rand_increasing<T>(min: T, max: T, length: usize) -> Vec<T>

@@ -9,15 +9,13 @@
 //! is uniform within certain bounds. Implemented for all primitive integer
 //! types.
 //!
-//! Significantly faster than the `Unimodal` encoding, but compression decays
-//! with the magnitude of the difference between the largest and smallest
-//! entries.
+//! Compression decays with the magnitude of the difference between the largest
+//! and smallest entries.
 //!
 //! # Examples
 //!
 //! ```
-//! use mayda::utility::{Access, Encodable};
-//! use mayda::uniform::Uniform;
+//! use mayda::{Access, Encodable, Uniform};
 //!
 //! let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
 //! let mut bits = Uniform::new();
@@ -56,8 +54,7 @@ const E_COUNT: u32 = 0x00007f80;
 /// # Examples
 ///
 /// ```
-/// use mayda::utility::{Access, Encodable};
-/// use mayda::uniform::Uniform;
+/// use mayda::{Access, Encodable, Uniform};
 ///
 /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
 /// let mut bits = Uniform::new();
@@ -91,9 +88,9 @@ const E_COUNT: u32 = 0x00007f80;
 /// # Performance
 ///
 /// Decoding does not allocate except for the return value, and decodes around
-/// 13 GiB/s of decoded integers. Encoding allocates `O(n)` memory (`n` in the
-/// length of the array), and encodes around 3 GiB/s of decoded integers.  Run
-/// `cargo bench --bench uniform` for performance numbers on your setup.
+/// 14.5 GiB/s of decoded integers. Encoding allocates `O(n)` memory (`n` in
+/// the length of the array), and encodes around 4 GiB/s of decoded integers.
+/// Run `cargo bench --bench uniform` for performance numbers on your setup.
 ///
 /// The performance (speed and compression) degrades gradually as the number of
 /// integers falls below 128.
@@ -106,6 +103,8 @@ const E_COUNT: u32 = 0x00007f80;
 /// A `Uniform` object performs unsafe pointer operations during encoding and
 /// decoding. Changing the header information with `mut_storage()` can cause
 /// data to be written to or read from arbitrary addresses in memory.
+///
+/// That said, the situation is the same for `Vec`.
 ///
 /// # Algorithm
 ///
@@ -328,8 +327,7 @@ impl<B: Bits> EncodablePrivate<B> for Uniform<B> {
 macro_rules! encodable_unsigned {
   ($(($ty: ident: $step: expr,
       $enc: ident, $dec: ident,
-      $enc_simd: ident, $dec_simd: ident,
-      $enc_shift: ident, $dec_shift: ident))*) => ($(
+      $enc_simd: ident, $dec_simd: ident))*) => ($(
     impl EncodablePrivate<$ty> for Uniform<$ty> {
       unsafe fn _encode(input: &[$ty]) -> Result<Vec<u32>, super::Error> {
         // Nothing to do
@@ -371,7 +369,9 @@ macro_rules! encodable_unsigned {
           }
           *shift_ptr.offset(a as isize) = shift;
 
-          mayda_codec::$enc_shift(c_ptr, e_cnt, shift);
+          for b in 0..(e_cnt as isize) {
+            *c_ptr.offset(b) = (*c_ptr.offset(b)).wrapping_sub(shift);
+          }
           c_ptr = c_ptr.offset(e_cnt as isize);
         }
         c_ptr = scratch.as_mut_ptr();
@@ -508,7 +508,9 @@ macro_rules! encodable_unsigned {
 
           let shift: $ty = *(s_ptr as *const $ty);
           s_ptr = s_ptr.offset(ty_wrd as isize);
-          mayda_codec::$dec_shift(o_ptr, 128, shift);
+          for a in 0..128 {
+            *o_ptr.offset(a) = (*o_ptr.offset(a)).wrapping_add(shift);
+          }
 
           o_ptr = o_ptr.offset(128);
         }
@@ -521,7 +523,9 @@ macro_rules! encodable_unsigned {
         s_ptr = Uniform::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
 
         let shift: $ty = *(s_ptr as *const $ty);
-        mayda_codec::$dec_shift(o_ptr, left, shift);
+        for a in 0..(left as isize) {
+          *o_ptr.offset(a) = (*o_ptr.offset(a)).wrapping_add(shift);
+        }
 
         // Set the length of output AFTER everything is initialized
         output.set_len((n_blks << 7) + left);
@@ -624,7 +628,7 @@ macro_rules! encodable_unsigned {
             }
           }
         }
-        return { if s_bits < 32 { s_ptr.offset(1) } else { s_ptr } }
+        if s_bits < 32 { s_ptr.offset(1) } else { s_ptr }
       }
 
       unsafe fn _decode_tail(s_ptr: *const u32,
@@ -761,7 +765,7 @@ macro_rules! encodable_unsigned {
 
           *o_ptr &= mask;
         }
-        return { if s_bits < 32 { s_ptr.offset(1) } else { s_ptr } }
+        if s_bits < 32 { s_ptr.offset(1) } else { s_ptr }
       }
     }
   )*)
@@ -770,20 +774,16 @@ macro_rules! encodable_unsigned {
 encodable_unsigned!{
   (u8: 8,
    ENCODE_U8, DECODE_U8,
-   ENCODE_SIMD_U8, DECODE_SIMD_U8,
-   encode_shift_u8, decode_shift_u8)
+   ENCODE_SIMD_U8, DECODE_SIMD_U8)
   (u16: 8,
    ENCODE_U16, DECODE_U16,
-   ENCODE_SIMD_U16, DECODE_SIMD_U16,
-   encode_shift_u16, decode_shift_u16)
+   ENCODE_SIMD_U16, DECODE_SIMD_U16)
   (u32: 8,
    ENCODE_U32, DECODE_U32,
-   ENCODE_SIMD_U32, DECODE_SIMD_U32,
-   encode_shift_u32, decode_shift_u32)
+   ENCODE_SIMD_U32, DECODE_SIMD_U32)
   (u64: 8,
    ENCODE_U64, DECODE_U64,
-   ENCODE_SIMD_U64, DECODE_SIMD_U64,
-   encode_shift_u64, decode_shift_u64)
+   ENCODE_SIMD_U64, DECODE_SIMD_U64)
 }
 
 #[cfg(target_pointer_width = "32")]
@@ -815,7 +815,7 @@ impl EncodablePrivate<usize> for Uniform<usize> {
 }
 
 macro_rules! encodable_signed {
-  ($(($it: ident: $ut: ident, $enc_shift: ident))*) => ($(
+  ($(($it: ident: $ut: ident))*) => ($(
     impl EncodablePrivate<$it> for Uniform<$it> {
       unsafe fn _encode(input: &[$it]) -> Result<Vec<u32>, super::Error> {
         // Nothing to do
@@ -857,7 +857,9 @@ macro_rules! encodable_signed {
           }
           *shift_ptr.offset(a as isize) = shift;
 
-          mayda_codec::$enc_shift(c_ptr as *mut $ut, e_cnt, shift as $ut);
+          for b in 0..(e_cnt as isize) {
+            *c_ptr.offset(b) = (*c_ptr.offset(b)).wrapping_sub(shift);
+          }
           c_ptr = c_ptr.offset(e_cnt as isize);
         }
 
@@ -972,10 +974,10 @@ macro_rules! encodable_signed {
 }
 
 encodable_signed!{
-  (i8: u8, encode_shift_u8)
-  (i16: u16, encode_shift_u16)
-  (i32: u32, encode_shift_u32)
-  (i64: u64, encode_shift_u64)
+  (i8: u8)
+  (i16: u16)
+  (i32: u32)
+  (i64: u64)
 }
 
 #[cfg(target_pointer_width = "32")]
@@ -1223,7 +1225,7 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
 }
 
 macro_rules! access_unsigned {
-  ($(($ty: ident: $step: expr, $dec: ident, $dec_simd: ident, $dec_shift: ident))*) => ($(
+  ($(($ty: ident: $step: expr, $dec: ident, $dec_simd: ident))*) => ($(
     impl AccessPrivate<usize> for Uniform<$ty> {
       unsafe fn _access(storage: &[u32], index: usize) -> $ty {
         if storage.is_empty() {
@@ -1351,7 +1353,9 @@ macro_rules! access_unsigned {
 
           let shift: $ty = *(s_ptr as *const $ty);
           s_ptr = s_ptr.offset(ty_wrd as isize);
-          mayda_codec::$dec_shift(o_ptr, 128, shift);
+          for a in 0..128 {
+            *o_ptr.offset(a) = (*o_ptr.offset(a)).wrapping_add(shift);
+          }
 
           o_ptr = o_ptr.offset(128);
         }
@@ -1377,7 +1381,9 @@ macro_rules! access_unsigned {
         s_ptr = Uniform::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
 
         let shift: $ty = *(s_ptr as *const $ty);
-        mayda_codec::$dec_shift(o_ptr, left, shift);
+        for a in 0..(left as isize) {
+          *o_ptr.offset(a) = (*o_ptr.offset(a)).wrapping_add(shift);
+        }
 
         // Shift the entries into the desired range
         let sft: usize = range.start - (s_blk << 7);
@@ -1430,7 +1436,9 @@ macro_rules! access_unsigned {
 
           let shift: $ty = *(s_ptr as *const $ty);
           s_ptr = s_ptr.offset(ty_wrd as isize);
-          mayda_codec::$dec_shift(o_ptr, 128, shift);
+          for a in 0..128 {
+            *o_ptr.offset(a) = (*o_ptr.offset(a)).wrapping_add(shift);
+          }
 
           o_ptr = o_ptr.offset(128);
         }
@@ -1453,7 +1461,9 @@ macro_rules! access_unsigned {
         s_ptr = Uniform::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
 
         let shift: $ty = *(s_ptr as *const $ty);
-        mayda_codec::$dec_shift(o_ptr, left, shift);
+        for a in 0..(left as isize) {
+          *o_ptr.offset(a) = (*o_ptr.offset(a)).wrapping_add(shift);
+        }
 
         // Shift the entries into the desired range
         let sft: usize = range.start - (s_blk << 7);
@@ -1469,10 +1479,10 @@ macro_rules! access_unsigned {
 }
 
 access_unsigned!{
-  (u8: 8, DECODE_U8, DECODE_SIMD_U8, decode_shift_u8)
-  (u16: 8, DECODE_U16, DECODE_SIMD_U16, decode_shift_u16)
-  (u32: 8, DECODE_U32, DECODE_SIMD_U32, decode_shift_u32)
-  (u64: 8, DECODE_U64, DECODE_SIMD_U64, decode_shift_u64)
+  (u8: 8, DECODE_U8, DECODE_SIMD_U8)
+  (u16: 8, DECODE_U16, DECODE_SIMD_U16)
+  (u32: 8, DECODE_U32, DECODE_SIMD_U32)
+  (u64: 8, DECODE_U64, DECODE_SIMD_U64)
 }
 
 macro_rules! access_signed {

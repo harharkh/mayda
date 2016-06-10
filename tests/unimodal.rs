@@ -12,18 +12,28 @@ extern crate mayda;
 extern crate num;
 extern crate rand;
 
-use mayda::utility::{Encodable, Access};
-use mayda::unimodal::Unimodal;
-use num::{FromPrimitive, ToPrimitive};
-use rand::distributions::{IndependentSample, Normal};
+use mayda::{Access, Encodable, Unimodal};
+use num::{Bounded, FromPrimitive, ToPrimitive};
+use rand::distributions::{IndependentSample, Range, Normal};
 
 fn rand_outliers<T>(mean: T, std_dev: T, length: usize) -> Vec<T>
-  where T: PartialOrd + FromPrimitive + ToPrimitive {
+  where T: PartialOrd +
+           Bounded +
+           FromPrimitive +
+           ToPrimitive +
+           rand::distributions::range::SampleRange {
   let mut output: Vec<T> = Vec::with_capacity(length);
-  let val = Normal::new(mean.to_f64().unwrap(), std_dev.to_f64().unwrap());
-  let mut rng = rand::thread_rng();
-  for _ in 0..length {
-    output.push(FromPrimitive::from_f64(val.ind_sample(&mut rng)).unwrap());
+  if length > 0 {
+    let val = Normal::new(mean.to_f64().unwrap(), std_dev.to_f64().unwrap());
+    let mut rng = rand::thread_rng();
+    for _ in 0..length {
+      output.push(FromPrimitive::from_f64(val.ind_sample(&mut rng)).unwrap());
+    }
+    let idx = Range::new(0, length);
+    let val = Range::new(Bounded::min_value(), Bounded::max_value());
+    for _ in 0..(length / 16) {
+      output[idx.ind_sample(&mut rng)] = val.ind_sample(&mut rng);
+    }
   }
   output
 }
