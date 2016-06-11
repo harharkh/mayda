@@ -12,19 +12,22 @@
 //! # Usage
 //! 
 //! Add this to your `Cargo.toml`:
+//!
 //! ```toml
 //! [dependencies]
 //! mayda = "0.1"
 //! ```
+//!
 //! and this to your crate root:
+//!
 //! ```rust
 //! extern crate mayda;
 //! ```
 //! 
 //! # Example: encoding and decoding
 //!
-//! The Uniform struct is recommended for general purpose integer compression.
-//! Use the Encodable trait to encode and decode the array.
+//! The `Uniform` struct is recommended for general purpose integer compression.
+//! Use the `Encodable` trait to encode and decode the array.
 //!
 //! ```rust
 //! use std::mem;
@@ -49,7 +52,7 @@
 //!
 //! # Example: indexing
 //! 
-//! Use the Access trait to index the compressed array. This is similar to
+//! Use the `Access` trait to index the compressed array. This is similar to
 //! `Index`, but returns a vector instead of a slice.
 //!
 //! ```rust
