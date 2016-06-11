@@ -18,7 +18,7 @@
 //!
 //! let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
 //! let mut bits = Unimodal::new();
-//! bits.encode(&input);
+//! bits.encode(&input).unwrap();
 //!
 //! let output = bits.decode().unwrap();
 //! assert_eq!(input, output);
@@ -57,7 +57,7 @@ const I_WIDTH: u32 = 0xe0000000;
 ///
 /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
 /// let mut bits = Unimodal::new();
-/// bits.encode(&input);
+/// bits.encode(&input).unwrap();
 ///
 /// let output = bits.decode().unwrap();
 /// assert_eq!(input, output);
@@ -136,15 +136,13 @@ impl<B: Bits> Unimodal<B> {
   ///
   /// # Examples
   /// ```
-  /// use std::mem;
   /// use mayda::{Encodable, Unimodal};
   ///
-  /// let mut bits = Unimodal::new();
-  ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
-  /// bits.encode(&input);
+  /// let mut bits = Unimodal::new();
+  /// bits.encode(&input).unwrap();
   ///
-  /// let bytes = mem::size_of_val(&bits);
+  /// let bytes = std::mem::size_of_val(bits.storage());
   /// assert_eq!(bytes, 16);
   /// ```
   #[inline]
@@ -159,7 +157,6 @@ impl<B: Bits> Unimodal<B> {
   ///
   /// # Examples
   /// ```
-  /// use std::mem;
   /// use mayda::{Encodable, Unimodal};
   ///
   /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
@@ -197,10 +194,9 @@ impl<B: Bits> Unimodal<B> {
   /// ```
   /// use mayda::{Encodable, Unimodal};
   ///
-  /// let mut bits = Unimodal::new();
-  ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
-  /// bits.encode(&input);
+  /// let mut bits = Unimodal::new();
+  /// bits.encode(&input).unwrap();
   ///
   /// assert_eq!(bits.len(), 6);
   /// ```
@@ -226,10 +222,9 @@ impl<B: Bits> Unimodal<B> {
   /// ```
   /// use mayda::{Encodable, Unimodal};
   ///
-  /// let mut bits = Unimodal::new();
-  ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
-  /// bits.encode(&input);
+  /// let mut bits = Unimodal::new();
+  /// bits.encode(&input).unwrap();
   ///
   /// let storage = bits.storage();
   /// assert_eq!(storage.len(), 4);
@@ -257,10 +252,9 @@ impl<B: Bits> Unimodal<B> {
   /// ```
   /// use mayda::{Encodable, Unimodal};
   ///
-  /// let mut bits = Unimodal::new();
-  ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
-  /// bits.encode(&input);
+  /// let mut bits = Unimodal::new();
+  /// bits.encode(&input).unwrap();
   ///
   /// assert_eq!(bits.required_width(), 32);
   /// ```

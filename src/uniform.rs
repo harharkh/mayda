@@ -19,7 +19,7 @@
 //!
 //! let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
 //! let mut bits = Uniform::new();
-//! bits.encode(&input);
+//! bits.encode(&input).unwrap();
 //!
 //! let length = bits.len();
 //! assert_eq!(length, 6);
@@ -58,7 +58,7 @@ const E_COUNT: u32 = 0x00007f80;
 ///
 /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
 /// let mut bits = Uniform::new();
-/// bits.encode(&input);
+/// bits.encode(&input).unwrap();
 ///
 /// let length = bits.len();
 /// assert_eq!(length, 6);
@@ -135,15 +135,13 @@ impl<B: Bits> Uniform<B> {
   ///
   /// # Examples
   /// ```
-  /// use std::mem;
   /// use mayda::{Encodable, Uniform};
   ///
-  /// let mut bits = Uniform::new();
-  ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
-  /// bits.encode(&input);
+  /// let mut bits = Uniform::new();
+  /// bits.encode(&input).unwrap();
   ///
-  /// let bytes = mem::size_of_val(&bits);
+  /// let bytes = std::mem::size_of_val(bits.storage());
   /// assert_eq!(bytes, 16);
   /// ```
   #[inline]
@@ -158,7 +156,6 @@ impl<B: Bits> Uniform<B> {
   ///
   /// # Examples
   /// ```
-  /// use std::mem;
   /// use mayda::{Encodable, Uniform};
   ///
   /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
@@ -196,10 +193,9 @@ impl<B: Bits> Uniform<B> {
   /// ```
   /// use mayda::{Encodable, Uniform};
   ///
-  /// let mut bits = Uniform::new();
-  ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
-  /// bits.encode(&input);
+  /// let mut bits = Uniform::new();
+  /// bits.encode(&input).unwrap();
   ///
   /// assert_eq!(bits.len(), 6);
   /// ```
@@ -225,10 +221,9 @@ impl<B: Bits> Uniform<B> {
   /// ```
   /// use mayda::{Encodable, Uniform};
   ///
-  /// let mut bits = Uniform::new();
-  ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
-  /// bits.encode(&input);
+  /// let mut bits = Uniform::new();
+  /// bits.encode(&input).unwrap();
   ///
   /// let storage = bits.storage();
   /// assert_eq!(storage.len(), 4);
@@ -256,10 +251,9 @@ impl<B: Bits> Uniform<B> {
   /// ```
   /// use mayda::{Encodable, Uniform};
   ///
-  /// let mut bits = Uniform::new();
-  ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
-  /// bits.encode(&input);
+  /// let mut bits = Uniform::new();
+  /// bits.encode(&input).unwrap();
   ///
   /// assert_eq!(bits.required_width(), 32);
   /// ```
