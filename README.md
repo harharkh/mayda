@@ -1,6 +1,7 @@
 # mayda
 
 [![Build Status](https://travis-ci.org/harharkh/mayda.svg)](https://travis-ci.org/harharkh/mayda)
+[![Latest Version](https://img.shields.io/crates/v/mayda.svg)](https://crates.io/crates/mayda)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)][MIT]
 
 A Rust library to compress integer arrays (all primitive integer types are
