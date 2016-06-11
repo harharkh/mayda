@@ -9,8 +9,10 @@
 //! is uniform within certain bounds. Implemented for all primitive integer
 //! types.
 //!
-//! Compression decays with the magnitude of the difference between the largest
-//! and smallest entries.
+//! This type targets encoding and decoding speed by performing minimal
+//! transformations of the input array, and only subtracts the minimum value
+//! from the entires. The result is that compression decays with the magnitude
+//! of the difference between the largest and smallest entries.
 //!
 //! # Examples
 //!
@@ -73,18 +75,6 @@ const E_COUNT: u32 = 0x00007f80;
 /// assert_eq!(range, vec![4, 2, 8]); 
 /// ```
 ///
-/// # Indexing
-///
-/// Indexing a `Uniform` object is not a simple pointer offset. The header of a
-/// `Uniform` object effectively encodes the relative offsets to every block,
-/// with the result that random access via the `Access` trait is an
-/// `O(log(idx))` operation, where `idx` is the value of the index (not the
-/// length of the array). The overhead of the header is around a tenth of a bit
-/// per encoded integer.
-///
-/// If you need to access several nearby entries, consider accessing the range
-/// and indexing the returned vector for performance.
-///
 /// # Performance
 ///
 /// Decoding does not allocate except for the return value, and decodes around
@@ -97,33 +87,12 @@ const E_COUNT: u32 = 0x00007f80;
 ///
 /// # Safety
 ///
-/// As a general rule, DO NOT decode or access `Uniform` objects from untrusted
-/// sources.
+/// As a general rule, you **should not** decode or access `Uniform` objects
+/// from untrusted sources.
 ///
 /// A `Uniform` object performs unsafe pointer operations during encoding and
 /// decoding. Changing the header information with `mut_storage()` can cause
 /// data to be written to or read from arbitrary addresses in memory.
-///
-/// That said, the situation is the same for `Vec`.
-///
-/// # Algorithm
-///
-/// The compression algorithm relies on the observation that for many integer
-/// arrays, the probability distribution of a block of 128 entries is not
-/// uniform over all values that can be represented by the integer type. For
-/// example, an array of indices into a second array with 256 entries has
-/// entries that are bounded below by 0 and above by 255. This requires only
-/// eight bits per entry, rather than the 32 or 64 generally set aside for a
-/// usize index. The basic idea of the compression algorithm is to represent
-/// all of the entries in a block with a single minimum necessary bit width. 
-/// This allows SIMD operations to be used to accelerate encoding and decoding.
-///
-/// While this approach does not perform well for probability distributions
-/// with outliers, the `Uniform` encoding does not try to address this and
-/// instead targets encoding and decoding speed. The only transformation is to
-/// subtract the minimum value from the entries, with the result that the
-/// compression depends only on the difference between the largest and smallest
-/// entries.
 #[derive(Clone, Debug, Default, Hash, PartialEq, PartialOrd)]
 pub struct Uniform<B> {
   storage: Box<[u32]>,

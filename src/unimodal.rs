@@ -4,12 +4,19 @@
 // http://opensource.org/licenses/MIT>. This file may not be copied, modified,
 // or distributed except according to those terms.
 
-//! `Unimodal` encoding of integer arrays. Intended for general purpose
-//! encoding, where detailed information about the probability distribution of
-//! the entries is not known. Implemented for all primitive integer types.
+//! `Unimodal` encoding of integer arrays. Intended for cases where information
+//! about the probability distribution of the entries is not known, and the
+//! presence of outliers reduces the compression ratio of the other types.
+//! Implemented for all primitive integer types.
 //!
-//! Compression decays with the standard deviation of the probability
-//! distribution of the entries.
+//! This type approaches general probability distributions with outliers by
+//! performing several initial transformations to reduce the minimum necessary
+//! bit width. Specifically, the median value is subtracted from the entries,
+//! the entries are mapped to the unsigned integers by the zig-zag encoding,
+//! and the most significant bits of any outliers are removed and stored
+//! separately. The result is that the compression effectively depends only on
+//! the standard deviation of the probability distribution of the block
+//! entries.
 //!
 //! # Examples
 //!
@@ -69,18 +76,6 @@ const I_WIDTH: u32 = 0xe0000000;
 /// assert_eq!(range, vec![4, 2, 8]); 
 /// ```
 ///
-/// # Indexing
-///
-/// Indexing a `Unimodal` object is not a simple pointer offset. The header of
-/// a `Unimodal` object effectively encodes the relative offsets to every
-/// block, with the result that random access via the `Access` trait is an
-/// `O(log(idx))` operation, where `idx` is the value of the index (not the
-/// length of the array). The overhead of the header is around a tenth of a bit
-/// per encoded integer.
-///
-/// If you need to access several nearby entries, consider accessing the range
-/// and indexing the returned vector for performance.
-///
 /// # Performance
 ///
 /// Decoding does not allocate except for the return value, and decodes around
@@ -95,36 +90,12 @@ const I_WIDTH: u32 = 0xe0000000;
 ///
 /// # Safety
 ///
-/// As a general rule, DO NOT decode or access `Unimodal` objects from
-/// untrusted sources.
+/// As a general rule, you **should not** decode or access `Unimodal` objects
+/// from untrusted sources.
 ///
 /// A `Unimodal` object performs unsafe pointer operations during encoding and
 /// decoding. Changing the header information with `mut_storage()` can cause
 /// data to be written to or read from arbitrary addresses in memory.
-///
-/// That said, the situation is the same for `Vec`.
-///
-/// # Algorithm
-///
-/// The compression algorithm relies on the observation that for many integer
-/// arrays, the probability distribution of a block of 128 entries is not
-/// uniform over all values that can be represented by the integer type. For
-/// example, an array of indices into a second array with 256 entries has
-/// entries that are bounded below by 0 and above by 255. This requires only
-/// eight bits per entry, rather than the 32 or 64 generally set aside for a
-/// usize index. The basic idea of the compression algorithm is to represent
-/// all of the entries in a block with a single minimum necessary bit width. 
-/// This allows SIMD operations to be used to accelerate encoding and decoding.
-///
-/// This approach does not perform well for probability distributions with
-/// outliers though, or for situations where the median value is nonzero. The
-/// `Unimodal` encoding handles this by performing several initial
-/// transformations to reduce the minimum necessary bit width. Specifically,
-/// the median value is subtracted from the entries, the entries are mapped to
-/// the unsigned integers by the zig-zag encoding, and the most significant
-/// bits of any outliers are removed and stored separately. The result is that
-/// the compression effectively depends only on the standard deviation of the 
-/// probability distribution of the block entries.
 #[derive(Clone, Debug, Default, Hash, PartialEq, PartialOrd)]
 pub struct Unimodal<B> {
   storage: Box<[u32]>,
