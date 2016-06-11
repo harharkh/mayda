@@ -48,7 +48,6 @@ the Encodable trait to encode and decode the array.
 ```rust
 extern crate mayda;
 
-use std::mem;
 use mayda::{Uniform, Encodable};
 
 fn main() {
@@ -58,8 +57,8 @@ fn main() {
 	let mut uniform = Uniform::new();
 	uniform.encode(&input).unwrap();
 
-	let i_bytes = mem::size_of_val(input.as_slice());
-	let u_bytes = mem::size_of_val(uniform.storage());
+	let i_bytes = std::mem::size_of_val(input.as_slice());
+	let u_bytes = std::mem::size_of_val(uniform.storage());
 	
 	// 128 bytes for encoded entries, 12 bytes of overhead
 	assert_eq!(i_bytes, 512);

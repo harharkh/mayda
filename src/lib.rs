@@ -27,8 +27,6 @@
 //! Use the Encodable trait to encode and decode the array.
 //!
 //! ```rust
-//! extern crate mayda;
-//! 
 //! use std::mem;
 //! use mayda::{Uniform, Encodable};
 //! 
@@ -38,8 +36,8 @@
 //! let mut uniform = Uniform::new();
 //! uniform.encode(&input).unwrap();
 //! 
-//! let i_bytes = mem::size_of_val(input.as_slice());
-//! let u_bytes = mem::size_of_val(uniform.storage());
+//! let i_bytes = std::mem::size_of_val(input.as_slice());
+//! let u_bytes = std::mem::size_of_val(uniform.storage());
 //! 
 //! // 128 bytes for encoded entries, 12 bytes of overhead
 //! assert_eq!(i_bytes, 512);
@@ -55,21 +53,19 @@
 //! `Index`, but returns a vector instead of a slice.
 //!
 //! ```rust
-//! extern crate mayda;
-//! 
 //! use mayda::{Uniform, Encodable, Access};
 //! 
 //! // All primitive integer types supported
-//! let input: Vec<isize> = (-64..64).collect();
+//! let input: Vec<i16> = (-64..64).collect();
 //! 
 //! let mut uniform = Uniform::new();
 //! uniform.encode(&input).unwrap();
 //! 
-//! let val: isize = uniform.access(64);
+//! let val: i16 = uniform.access(64);
 //! assert_eq!(val, 0);
 //! 
 //! // Vector is returned to give ownership to the caller
-//! let range: Vec<isize> = uniform.access(..10);
+//! let range: Vec<i16> = uniform.access(..10);
 //! assert_eq!(range, (-64..-54).collect::<Vec<_>>());
 //! ```
 //!
