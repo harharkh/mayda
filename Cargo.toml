@@ -2,6 +2,12 @@
 name = "mayda"
 version = "0.1.0"
 authors = ["Jeremy Mason <jkylemason@gmail.com>"]
+license = "MIT"
+description = "Compression of integer arrays, favoring decompression speed."
+repository = "https://github.com/harharkh/mayda"
+documentation = "https://harharkh.github.io/mayda"
+readme = "README.md"
+keywords = ["mayda", "compression"]
 
 [lib]
 name = "mayda"
