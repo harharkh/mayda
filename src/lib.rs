@@ -110,18 +110,18 @@
 //! only on the standard deviation of the probability distribution of the block
 //! entries.
 //!
-/// # Indexing
-///
-/// Indexing an object of the `Uniform`, `Monotone` or `Unimodal` types is not
-/// a simple pointer offset. Part of the header encodes the relative offsets to
-/// every block in a compressed form, with the result that random access via
-/// the `Access` trait is an `O(log(idx))` operation, where `idx` is the value
-/// of the index (not the length of the array). The overhead of this part of
-/// the header is around a tenth of a bit per encoded integer.
-///
-/// If you need to access several nearby entries, consider accessing the range
-/// and indexing the returned vector for performance.
-///
+//! # Indexing
+//!
+//! Indexing an object of the `Uniform`, `Monotone` or `Unimodal` types is not
+//! a simple pointer offset. Part of the header encodes the relative offsets to
+//! every block in a compressed form, with the result that random access via
+//! the `Access` trait is an `O(log(idx))` operation, where `idx` is the value
+//! of the index (not the length of the array). The overhead of this part of
+//! the header is around a tenth of a bit per encoded integer.
+//!
+//! If you need to access several nearby entries, consider accessing the range
+//! and indexing the returned vector for performance.
+//!
 //! # Safety
 //!
 //! As a general rule, you **should not** decode or access objects of the
