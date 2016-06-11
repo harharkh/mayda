@@ -112,9 +112,9 @@ for _ in 0..(length / 16) {
 }
 ```
 
-The performance of the [`Uniform`], [`Monotone`] and [`Unimodal`] types for these three vectors on a 2.6 GHz Intel Core i7-6700HQ processor is given below. Encoding and decoding speeds are reported in billions of integers per second, time to access the last entry is reported in nanoseconds, and compression is reported as bits per integer. Native encoding and decoding speeds allocate memory and perform a memcpy.
+The performance of the [`Uniform`], [`Monotone`] and [`Unimodal`] types for these three vectors on a 2.6 GHz Intel Core i7-6700HQ processor is given below. Encoding and decoding speeds are reported in billions of integers per second, time to access the last entry is reported in nanoseconds, and compression is reported as bits per integer. Native encoding and decoding speeds allocate memory and perform a memcpy. The Shannon entropy is a reasonable target for the bits per integer.
 
-For `input1` the Shannon entropy is 10.00. `Uniform` is preferrable for the general case.
+For `input1` the Shannon entropy is 10.00. `Uniform` is preferrable in every respect for the general case.
 
 |          | Encode (BInt/s) | Decode (BInt/s) | Index (ns) | Bits/Int |
 |----------|-----------------|-----------------|------------|----------|
@@ -123,7 +123,7 @@ For `input1` the Shannon entropy is 10.00. `Uniform` is preferrable for the gene
 | Unimodal |       0.21      |       2.13      |     53     |   11.16  |
 | Native   |      14.03      |      14.03      |      0     |    32    |
 
-For `input2` the Shannon entropy is 10.00, but the additional structure is used to improve compression, particularly for `Monotone`.
+For `input2` the Shannon entropy is 10.00, but the additional structure is used by `Monotone` to improve compression.
 
 |          | Encode (BInt/s) | Decode (BInt/s) | Index (ns) | Bits/Int |
 |----------|-----------------|-----------------|------------|----------|
@@ -151,4 +151,4 @@ For `input3` the Shannon entropy is 12.46, but compression is difficult due to t
    [`Unimodal`]: <https://harharkh.github.io/mayda/mayda/unimodal/index.html>
    [Zukowski2006]: <https://dx.doi.org/10.1109/ICDE.2006.150>
    [Lemire2015]: <https://arxiv.org/abs/1401.6399>
-   [docs]: <ttps://harharkh.github.io/mayda/mayda/index.html>
+   [docs]: <https://harharkh.github.io/mayda/mayda/index.html>
