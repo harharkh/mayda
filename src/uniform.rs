@@ -1257,7 +1257,8 @@ macro_rules! access_unsigned {
 
           s_ptr = s_ptr.offset(utility::words_for_bits(e_wd * left as u32) as isize);
         }
-        output &= !0 >> (ty_wd - e_wd);
+        let mask: $ty = { if e_wd > 0 { !0 >> (ty_wd - e_wd) } else { 0 } };
+        output &= mask;
 
         let shift: $ty = *(s_ptr as *const $ty);
         output.wrapping_add(shift)
