@@ -1,8 +1,9 @@
 // Copyright 2016 Jeremy Mason
 //
-// Licensed under the MIT license <LICENSE or
-// http://opensource.org/licenses/MIT>. This file may not be copied, modified,
-// or distributed except according to those terms.
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 //! This crate provides three types to compress integer arrays. The design
 //! generally favors decompression speed and the ability to index the
@@ -46,7 +47,7 @@
 //! assert_eq!(i_bytes, 512);
 //! assert_eq!(u_bytes, 140);
 //! 
-//! let output: Vec<u32> = uniform.decode().unwrap();
+//! let output: Vec<u32> = uniform.decode();
 //! assert_eq!(input, output);
 //! ```
 //!
@@ -127,12 +128,11 @@
 //! `Uniform`, `Monotone` or `Unimodal` types from untrusted sources.
 //!
 //! `mayda` performs wildly unsafe pointer operations during encoding and
-//! decoding. Changing the header information with `mut_storage()` could cause
-//! data to be written to or read from arbitrary addresses in memory.
+//! decoding. Changing the header information with `mut_storage` can cause data
+//! to be written to or read from arbitrary addresses in memory.
 //!
 //! That said, the situation is the same for any of the data structures in the
-//! standard library. For example, this is why the `set_len` method of a `Vec`
-//! is unsafe.
+//! standard library (consider the `set_len` method of a `Vec`).
 
 #![feature(inclusive_range)]
 #![feature(inclusive_range_syntax)]

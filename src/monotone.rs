@@ -1,8 +1,9 @@
 // Copyright 2016 Jeremy Mason
 //
-// Licensed under the MIT license <LICENSE or
-// http://opensource.org/licenses/MIT>. This file may not be copied, modified,
-// or distributed except according to those terms.
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 //! `Monotone` encoding of integer arrays. Intended for cases where the entries
 //! are monotonically increasing. Implemented for all primitive integer types.  
@@ -22,7 +23,7 @@
 //! let mut bits = Monotone::new();
 //! bits.encode(&input).unwrap();
 //!
-//! let output = bits.decode().unwrap();
+//! let output = bits.decode();
 //! assert_eq!(input, output);
 //!
 //! let value = bits.access(4);
@@ -45,9 +46,9 @@ const E_COUNT: u32 = 0x00007f80;
 /// compression and efficient decoding through the `Encodable` trait, and
 /// efficient random access through the `Access` trait.
 ///
-/// Support is provided for arrays with as many as 2^37 entries, or 512 GiB of
-/// `u32`s. If your application requires more than that, you should probably
-/// be designing your own data structure anyway.
+/// Support is provided for arrays with as many as (2^37 - 2^7) entries, or
+/// about 512 GiB of `u32`s. If your application requires more than that, you
+/// should probably be designing your own data structure anyway.
 ///
 /// # Examples
 ///
@@ -58,7 +59,7 @@ const E_COUNT: u32 = 0x00007f80;
 /// let mut bits = Monotone::new();
 /// bits.encode(&input).unwrap();
 ///
-/// let output = bits.decode().unwrap();
+/// let output = bits.decode();
 /// assert_eq!(input, output);
 ///
 /// let value = bits.access(4);
@@ -84,8 +85,11 @@ const E_COUNT: u32 = 0x00007f80;
 /// from untrusted sources.
 ///
 /// A `Monotone` object performs unsafe pointer operations during encoding and
-/// decoding. Changing the header information with `mut_storage()` can cause
-/// data to be written to or read from arbitrary addresses in memory.
+/// decoding. Changing the header information with `mut_storage` can cause data
+/// to be written to or read from arbitrary addresses in memory.
+///
+/// That said, the situation is the same for any of the data structures in the
+/// standard library (consider the `set_len` method of a `Vec`).
 #[derive(Clone, Debug, Default, Hash, PartialEq, PartialOrd)]
 pub struct Monotone<B> {
   storage: Box<[u32]>,
@@ -123,7 +127,7 @@ impl<B: Bits> Monotone<B> {
   /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
   /// let bits = Monotone::from_slice(&input).unwrap();
   ///
-  /// let output = bits.decode().unwrap();
+  /// let output = bits.decode();
   /// assert_eq!(input, output);
   /// ```
   #[inline]
@@ -240,7 +244,7 @@ impl<B: Bits> Encodable<B> for Monotone<B> {
     Ok(())
   }
 
-  fn decode(&self) -> Result<Vec<B>, super::Error> {
+  fn decode(&self) -> Vec<B> {
     unsafe { Monotone::<B>::_decode(&*self.storage) }
   }
 }
@@ -252,7 +256,7 @@ trait EncodablePrivate<B: Bits> {
   unsafe fn _encode(&[B]) -> Result<Vec<u32>, super::Error>;
 
   /// Decodes a slice.
-  unsafe fn _decode(&[u32]) -> Result<Vec<B>, super::Error>;
+  unsafe fn _decode(&[u32]) -> Vec<B>;
 
   /// Encodes a block with 128 or fewer elements. Returns pointer to storage.
   unsafe fn _encode_tail(_: *const B, _: *mut u32, usize, u32) -> *mut u32;
@@ -267,8 +271,8 @@ impl<B: Bits> EncodablePrivate<B> for Monotone<B> {
     Err(super::Error::new("Encodable not implemented for this type"))
   }
 
-  default unsafe fn _decode(_: &[u32]) -> Result<Vec<B>, super::Error> {
-    Err(super::Error::new("Encodable not implemented for this type"))
+  default unsafe fn _decode(_: &[u32]) -> Vec<B> {
+    panic!("Encodable not implemented for this type")
   }
 
   default unsafe fn _encode_tail(_: *const B, _: *mut u32, _: usize, _: u32) -> *mut u32 {
@@ -418,9 +422,9 @@ macro_rules! encodable_unsigned {
         Ok(storage)
       }
 
-      unsafe fn _decode(storage: &[u32]) -> Result<Vec<$ty>, super::Error> {
+      unsafe fn _decode(storage: &[u32]) -> Vec<$ty> {
         // Nothing to do
-        if storage.is_empty() { return Ok(Vec::new()) }
+        if storage.is_empty() { return Vec::new() }
 
         // Internal representation of ty
         let ty_wd: u32 = $ty::width();
@@ -480,7 +484,7 @@ macro_rules! encodable_unsigned {
 
         // Set the length of output AFTER everything is initialized
         output.set_len((n_blks << 7) + left);
-        Ok(output)
+        output
       }
 
       unsafe fn _encode_tail(c_ptr: *const $ty,
@@ -749,9 +753,8 @@ impl EncodablePrivate<usize> for Monotone<usize> {
   }
 
   #[inline]
-  unsafe fn _decode(storage: &[u32]) -> Result<Vec<usize>, super::Error> {
-    let scratch: Vec<u32> = try!(Monotone::<u32>::_decode(storage));
-    Ok(mem::transmute(scratch))
+  unsafe fn _decode(storage: &[u32]) -> Vec<usize> {
+    mem::transmute(Monotone::<u32>::_decode(storage))
   }
 }
 
@@ -763,9 +766,8 @@ impl EncodablePrivate<usize> for Monotone<usize> {
   }
 
   #[inline]
-  unsafe fn _decode(storage: &[u32]) -> Result<Vec<usize>, super::Error> {
-    let scratch: Vec<u64> = try!(Monotone::<u64>::_decode(storage));
-    Ok(mem::transmute(scratch))
+  unsafe fn _decode(storage: &[u32]) -> Vec<usize> {
+    mem::transmute(Monotone::<u64>::_decode(storage))
   }
 }
 
@@ -911,9 +913,8 @@ macro_rules! encodable_signed {
       }
 
       #[inline]
-      unsafe fn _decode(storage: &[u32]) -> Result<Vec<$it>, super::Error> {
-        let scratch: Vec<$ut> = try!(Monotone::<$ut>::_decode(storage));
-        Ok(mem::transmute(scratch))
+      unsafe fn _decode(storage: &[u32]) -> Vec<$it> {
+        mem::transmute(Monotone::<$ut>::_decode(storage))
       }
     }
   )*)
@@ -934,9 +935,8 @@ impl EncodablePrivate<isize> for Monotone<isize> {
   }
 
   #[inline]
-  unsafe fn _decode(storage: &[u32]) -> Result<Vec<isize>, super::Error> {
-    let scratch: Vec<u32> = try!(Monotone::<u32>::_decode(storage));
-    Ok(mem::transmute(scratch))
+  unsafe fn _decode(storage: &[u32]) -> Vec<isize> {
+    mem::transmute(Monotone::<u32>::_decode(storage))
   }
 }
 
@@ -948,9 +948,8 @@ impl EncodablePrivate<isize> for Monotone<isize> {
   }
 
   #[inline]
-  unsafe fn _decode(storage: &[u32]) -> Result<Vec<isize>, super::Error> {
-    let scratch: Vec<u64> = try!(Monotone::<u64>::_decode(storage));
-    Ok(mem::transmute(scratch))
+  unsafe fn _decode(storage: &[u32]) -> Vec<isize> {
+    mem::transmute(Monotone::<u64>::_decode(storage))
   }
 }
 
@@ -1019,7 +1018,7 @@ impl<B: Bits> Access<ops::RangeFull> for Monotone<B> {
 
   #[inline]
   fn access(&self, _: ops::RangeFull) -> Vec<B> {
-    self.decode().unwrap()
+    self.decode()
   }
 }
 

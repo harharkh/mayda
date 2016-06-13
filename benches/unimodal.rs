@@ -1,8 +1,9 @@
 // Copyright 2016 Jeremy Mason
 //
-// Licensed under the MIT license <LICENSE or
-// http://opensource.org/licenses/MIT>. This file may not be copied, modified,
-// or distributed except according to those terms.
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 #![feature(test)]
 
@@ -47,7 +48,7 @@ macro_rules! encode_bench {
       b.iter(|| {
         bin.encode(&input).unwrap();
       });
-      let output = bin.decode().unwrap();
+      let output = bin.decode();
       assert_eq!(input, output);
     }
   )*)
@@ -85,7 +86,7 @@ macro_rules! decode_bench {
       bin.encode(&input).unwrap();
       let mut output = Vec::new();
       b.iter(|| {
-        output = bin.decode().unwrap();
+        output = bin.decode();
       });
       assert_eq!(input, output);
     }

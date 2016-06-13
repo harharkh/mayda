@@ -1,8 +1,8 @@
 [package]
 name = "mayda"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Jeremy Mason <jkylemason@gmail.com>"]
-license = "MIT"
+license = "MIT OR Apache-2.0"
 description = "Compression of integer arrays, favoring decompression speed."
 repository = "https://github.com/harharkh/mayda"
 documentation = "https://harharkh.github.io/mayda"
@@ -13,6 +13,8 @@ keywords = ["mayda", "compression"]
 name = "mayda"
 
 [dependencies]
-mayda_codec = { path = "mayda_codec", version = "^0.1.0" }
+mayda_codec = { path = "mayda_codec", version = "^0.1" }
+
+[dev-dependencies]
 num = "^0.1"
 rand = "^0.3"

@@ -1,8 +1,9 @@
 // Copyright 2016 Jeremy Mason
 //
-// Licensed under the MIT license <LICENSE or
-// http://opensource.org/licenses/MIT>. This file may not be copied, modified,
-// or distributed except according to those terms.
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 //! Defines the `mayda::Error` type. Currently only used for the return types of
 //! functions defined in the `Encodable` trait, but intended to allow for more

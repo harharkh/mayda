@@ -1,6 +1,9 @@
-// Licensed under the MIT license <LICENSE or
-// http://opensource.org/licenses/MIT>. This file may not be copied, modified,
-// or distributed except according to those terms.
+// Copyright 2016 Jeremy Mason
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 //! Contains constants, enums, traits and functions used by all of the encoding
 //! types provided by the `mayda` crate.
@@ -57,17 +60,22 @@ bits_impl!{
 
 /// Indicates that the type can be encoded and decoded by `mayda`.
 ///
-/// The default implementations of `encode` and `decode` return errors to
-/// indicate that there is no available specialization for the type. This
-/// should not happen unless the user implements `Bits` for some other type or
-/// there is a library bug.
+/// The default implementations of `encode` and `decode` return an error or
+/// panic to indicate that there is no available specialization for the type.
+/// This should not happen unless the user implements `Bits` for some other
+/// type or there is a library bug.
 pub trait Encodable<B: Bits> {
   /// Encodes the slice in the `Encodable` object.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error if the input slice contains more than the supported
+  /// number of entries (currently 2^37 - 2^7).
   fn encode(&mut self, &[B]) -> Result<(), super::Error>;
 
   /// Decodes the slice in the `Encodable` object. An encoded vector type must
   /// give ownership of the returned value to the caller.
-  fn decode(&self) -> Result<Vec<B>, super::Error>;
+  fn decode(&self) -> Vec<B>;
 }
 
 /// A trait for indexing an encoded vector. Similar to but less convenient than

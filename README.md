@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/harharkh/mayda.svg)](https://travis-ci.org/harharkh/mayda)
 [![Latest Version](https://img.shields.io/crates/v/mayda.svg)](https://crates.io/crates/mayda)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)][MIT]
+![Works on nightly](https://img.shields.io/badge/works%20on-nightly-lightgrey.svg)
 
 A Rust library to compress integer arrays (all primitive integer types are
 supported). The design favors decompression speed and the ability to index the
@@ -16,10 +16,9 @@ The [`Monotone`] and [`Unimodal`] types decompress at around half the speed,
 but can have much better compression ratios depending on the distribution of
 the integers.
 
-Compiling `mayda` requires the **nightly** compiler (`repr_simd` is behind a
-feature gate) and CPU support for the SSE2 instruction set (any Intel or AMD
-processor manufactured after 2003). The basic approach is further described in
-[Zukowski2006] and [Lemire2015].
+Compiling `mayda` requires the **nightly** compiler and CPU support for the
+SSE2 instruction set (any Intel or AMD processor manufactured after 2003). The
+basic approach is further described in [Zukowski2006] and [Lemire2015].
 
 ### Documentation
 
@@ -65,7 +64,7 @@ fn main() {
 	assert_eq!(i_bytes, 512);
 	assert_eq!(u_bytes, 140);
 
-	let output: Vec<u32> = uniform.decode().unwrap();
+	let output: Vec<u32> = uniform.decode();
 	assert_eq!(input, output);
 }
 ```
@@ -171,8 +170,18 @@ the presence of outliers. `Unimodal` gives the most robust compression.
 
 ## License
 
-`mayda` is distributed under the terms of the [MIT] license. See LICENSE for
-details.
+`mayda` is licensed under either of
+
+ * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or https://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license ([LICENSE-MIT](LICENSE-MIT) or https://opensource.org/licenses/MIT)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall
+be dual licensed as above, without any additional terms or conditions.
 
 [//]: #
    [`Uniform`]: <https://harharkh.github.io/mayda/mayda/uniform/index.html>
@@ -181,4 +190,5 @@ details.
    [Zukowski2006]: <https://dx.doi.org/10.1109/ICDE.2006.150>
    [Lemire2015]: <https://arxiv.org/abs/1401.6399>
    [docs]: <https://harharkh.github.io/mayda/mayda/index.html>
+   [Apache-2.0]: <https://www.apache.org/licenses/LICENSE-2.0>
    [MIT]: <https://opensource.org/licenses/MIT>
