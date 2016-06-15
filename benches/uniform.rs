@@ -27,7 +27,7 @@ fn rand_uniform<T>(min: T, max: T, length: usize) -> Vec<T>
   }
   output
 }
-/*
+
 macro_rules! encode_bench {
   ($(($t: ty: $min: expr, $max: expr, $length: expr, $name: ident))*) => ($(
     #[bench]
@@ -65,7 +65,7 @@ encode_bench!{
   (i32: std::i32::MIN, std::i32::MAX, 32768, en_i32_MIN_MAX_32768)
   (i64: std::i64::MIN, std::i64::MAX, 32768, en_i64_MIN_MAX_32768)
 }
-*/
+
 macro_rules! decode_bench {
   ($(($t: ty: $min: expr, $max: expr, $length: expr, $name: ident))*) => ($(
     #[bench]
@@ -73,9 +73,9 @@ macro_rules! decode_bench {
       let mut bin = Uniform::new();
       let input: Vec<$t> = rand_uniform($min, $max, $length);
       bin.encode(&input).unwrap();
-      let mut output = Vec::new();
+      let mut output = vec![0; $length];
       b.iter(|| {
-        output = bin.decode();
+        bin.decode_into(&mut *output).unwrap();
       });
       assert_eq!(input, output);
     }

@@ -182,11 +182,11 @@ impl<B: Bits> Uniform<B> {
 
     let ty_wd: u32 = B::width();
     let wrd_to_blk: usize = words_to_block(n_blks, n_blks, ty_wd, s_ptr);
-    let tail_len: usize = unsafe {
+    let left: usize = unsafe {
       ((*s_ptr.offset(wrd_to_blk as isize) & E_COUNT) >> 7) as usize
     };
 
-    n_blks << 7 + tail_len
+    (n_blks << 7) + left
   }
 
   /// Exposes the word storage of the `Uniform` object.
@@ -267,7 +267,7 @@ impl<B: Bits> Encode<B> for Uniform<B> {
       ((*s_ptr.offset(wrd_to_blk as isize) & E_COUNT) >> 7) as usize
     };
 
-    let length = (n_blks << 7) + left;
+    let length: usize = (n_blks << 7) + left;
     let mut output: Vec<B> = Vec::with_capacity(length);
     unsafe {
       Uniform::<B>::_decode(&*self.storage, n_blks, left, &mut *output);
@@ -277,6 +277,40 @@ impl<B: Bits> Encode<B> for Uniform<B> {
   }
 
   fn decode_into(&self, output: &mut [B]) -> Result<(), super::Error> {
+    if self.storage.is_empty() {
+      if !output.is_empty() {
+        return Err(
+          super::Error::new(
+            &*format!("source length is 0 but slice length is {}", output.len())
+          )
+        )
+      } else {
+        return Ok(())
+      }
+    }
+
+    let s_ptr: *const u32 = self.storage.as_ptr();
+    let n_blks: usize = unsafe {
+      (*s_ptr >> 2) as usize
+    };
+
+    let ty_wd: u32 = B::width();
+    let wrd_to_blk: usize = words_to_block(n_blks, n_blks, ty_wd, s_ptr);
+    let left: usize = unsafe {
+      ((*s_ptr.offset(wrd_to_blk as isize) & E_COUNT) >> 7) as usize
+    };
+
+    let length: usize = (n_blks << 7) + left;
+    if output.len() != length {
+      return Err(
+        super::Error::new(
+          &*format!("source length is {} but slice length is {}", length, output.len())
+        )
+      )
+    }
+    unsafe {
+      Uniform::<B>::_decode(&*self.storage, n_blks, left, output);
+    }
     Ok(())
   }
 }
