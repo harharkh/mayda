@@ -2,7 +2,7 @@
 name = "mayda_macros"
 version = "0.1.1"
 authors = ["Jeremy Mason <jkylemason@gmail.com>"]
-license = "MIT OR Apache-2.0"
+license = "MIT/Apache-2.0"
 description = "Macros to generate basic encoding and decoding functions used by mayda"
 repository = "https://github.com/harharkh/mayda"
 documentation = "https://harharkh.github.io/mayda"

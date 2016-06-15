@@ -17,7 +17,7 @@
 //! # Examples
 //!
 //! ```
-//! use mayda::{Access, Encodable, Monotone};
+//! use mayda::{Access, Encode, Monotone};
 //!
 //! let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
 //! let mut bits = Monotone::new();
@@ -37,13 +37,13 @@ use std::marker::PhantomData;
 use std::{mem, ops, ptr, usize};
 
 use mayda_codec;
-use utility::{self, Bits, Encodable, Access};
+use utility::{self, Bits, Encode, Access};
 
 const E_WIDTH: u32 = 0x0000007f;
 const E_COUNT: u32 = 0x00007f80;
 
 /// The type of a monotone encoded integer array. Designed for moderate
-/// compression and efficient decoding through the `Encodable` trait, and
+/// compression and efficient decoding through the `Encode` trait, and
 /// efficient random access through the `Access` trait.
 ///
 /// Support is provided for arrays with as many as (2^37 - 2^7) entries, or
@@ -53,7 +53,7 @@ const E_COUNT: u32 = 0x00007f80;
 /// # Examples
 ///
 /// ```
-/// use mayda::{Access, Encodable, Monotone};
+/// use mayda::{Access, Encode, Monotone};
 ///
 /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
 /// let mut bits = Monotone::new();
@@ -101,7 +101,7 @@ impl<B: Bits> Monotone<B> {
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, Monotone};
+  /// use mayda::{Encode, Monotone};
   ///
   /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
   /// let mut bits = Monotone::new();
@@ -122,7 +122,7 @@ impl<B: Bits> Monotone<B> {
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, Monotone};
+  /// use mayda::{Encode, Monotone};
   ///
   /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
   /// let bits = Monotone::from_slice(&input).unwrap();
@@ -157,7 +157,7 @@ impl<B: Bits> Monotone<B> {
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, Monotone};
+  /// use mayda::{Encode, Monotone};
   ///
   /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
   /// let mut bits = Monotone::new();
@@ -185,7 +185,7 @@ impl<B: Bits> Monotone<B> {
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, Monotone};
+  /// use mayda::{Encode, Monotone};
   ///
   /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
   /// let mut bits = Monotone::new();
@@ -215,7 +215,7 @@ impl<B: Bits> Monotone<B> {
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, Monotone};
+  /// use mayda::{Encode, Monotone};
   ///
   /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
   /// let mut bits = Monotone::new();
@@ -234,10 +234,10 @@ impl<B: Bits> Monotone<B> {
 ////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
-// Implementations of Encodable
+// Implementations of Encode
 ////////////////////////////////////////////////////////////////////////////////
 
-impl<B: Bits> Encodable<B> for Monotone<B> {
+impl<B: Bits> Encode<B> for Monotone<B> {
   fn encode(&mut self, input: &[B]) -> Result<(), super::Error> {
     let storage: Vec<u32> = unsafe { try!(Monotone::<B>::_encode(input)) };
     self.storage = storage.into_boxed_slice();
@@ -249,9 +249,9 @@ impl<B: Bits> Encodable<B> for Monotone<B> {
   }
 }
 
-/// The private interface of an `Encodable` type. Allows the implementation to
+/// The private interface of an `Encode` type. Allows the implementation to
 /// be shared for different types.
-trait EncodablePrivate<B: Bits> {
+trait EncodePrivate<B: Bits> {
   /// Encodes a slice.
   unsafe fn _encode(&[B]) -> Result<Vec<u32>, super::Error>;
 
@@ -266,21 +266,21 @@ trait EncodablePrivate<B: Bits> {
 }
 
 /// Default is only to catch unimplemented types. Should not be reachable.
-impl<B: Bits> EncodablePrivate<B> for Monotone<B> {
+impl<B: Bits> EncodePrivate<B> for Monotone<B> {
   default unsafe fn _encode(_: &[B]) -> Result<Vec<u32>, super::Error> {
-    Err(super::Error::new("Encodable not implemented for this type"))
+    Err(super::Error::new("Encode not implemented for this type"))
   }
 
   default unsafe fn _decode(_: &[u32]) -> Vec<B> {
-    panic!("Encodable not implemented for this type")
+    panic!("Encode not implemented for this type")
   }
 
   default unsafe fn _encode_tail(_: *const B, _: *mut u32, _: usize, _: u32) -> *mut u32 {
-    panic!("Encodable not implemented for this type");
+    panic!("Encode not implemented for this type");
   }
 
   default unsafe fn _decode_tail(_: *const u32, _: *mut B, _: usize, _: u32) -> *const u32 {
-    panic!("Encodable not implemented for this type");
+    panic!("Encode not implemented for this type");
   }
 }
 
@@ -289,7 +289,7 @@ macro_rules! encodable_unsigned {
       $enc: ident, $dec: ident,
       $enc_simd: ident, $dec_simd: ident,
       $enc_delta: ident))*) => ($(
-    impl EncodablePrivate<$ty> for Monotone<$ty> {
+    impl EncodePrivate<$ty> for Monotone<$ty> {
       unsafe fn _encode(input: &[$ty]) -> Result<Vec<u32>, super::Error> {
         // Nothing to do
         if input.is_empty() { return Ok(Vec::new()) }
@@ -746,7 +746,7 @@ encodable_unsigned!{
 }
 
 #[cfg(target_pointer_width = "32")]
-impl EncodablePrivate<usize> for Monotone<usize> {
+impl EncodePrivate<usize> for Monotone<usize> {
   #[inline]
   unsafe fn _encode(storage: &[usize]) -> Result<Vec<u32>, super::Error> {
     Monotone::<u32>::_encode(mem::transmute(storage))
@@ -759,7 +759,7 @@ impl EncodablePrivate<usize> for Monotone<usize> {
 }
 
 #[cfg(target_pointer_width = "64")]
-impl EncodablePrivate<usize> for Monotone<usize> {
+impl EncodePrivate<usize> for Monotone<usize> {
   #[inline]
   unsafe fn _encode(storage: &[usize]) -> Result<Vec<u32>, super::Error> {
     Monotone::<u64>::_encode(mem::transmute(storage))
@@ -773,7 +773,7 @@ impl EncodablePrivate<usize> for Monotone<usize> {
 
 macro_rules! encodable_signed {
   ($(($it: ident: $ut: ident, $enc_delta: ident))*) => ($(
-    impl EncodablePrivate<$it> for Monotone<$it> {
+    impl EncodePrivate<$it> for Monotone<$it> {
       unsafe fn _encode(input: &[$it]) -> Result<Vec<u32>, super::Error> {
         // Nothing to do
         if input.is_empty() { return Ok(Vec::new()) }
@@ -928,7 +928,7 @@ encodable_signed!{
 }
 
 #[cfg(target_pointer_width = "32")]
-impl EncodablePrivate<isize> for Monotone<isize> {
+impl EncodePrivate<isize> for Monotone<isize> {
   #[inline]
   unsafe fn _encode(storage: &[isize]) -> Result<Vec<u32>, super::Error> {
     Monotone::<i32>::_encode(mem::transmute(storage))
@@ -941,7 +941,7 @@ impl EncodablePrivate<isize> for Monotone<isize> {
 }
 
 #[cfg(target_pointer_width = "64")]
-impl EncodablePrivate<isize> for Monotone<isize> {
+impl EncodePrivate<isize> for Monotone<isize> {
   #[inline]
   unsafe fn _encode(storage: &[isize]) -> Result<Vec<u32>, super::Error> {
     Monotone::<i64>::_encode(mem::transmute(storage))

@@ -18,7 +18,7 @@
 //! # Examples
 //!
 //! ```
-//! use mayda::{Access, Encodable, Uniform};
+//! use mayda::{Access, Encode, Uniform};
 //!
 //! let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
 //! let mut bits = Uniform::new();
@@ -41,13 +41,13 @@ use std::marker::PhantomData;
 use std::{mem, ops, ptr, usize};
 
 use mayda_codec;
-use utility::{self, Bits, Encodable, Access};
+use utility::{self, Bits, Encode, Access};
 
 const E_WIDTH: u32 = 0x0000007f;
 const E_COUNT: u32 = 0x00007f80;
 
 /// The type of a uniform encoded integer array. Designed for moderate
-/// compression and efficient decoding through the `Encodable` trait, and
+/// compression and efficient decoding through the `Encode` trait, and
 /// efficient random access through the `Access` trait.
 ///
 /// Support is provided for arrays with as many as (2^37 - 2^7) entries, or
@@ -57,7 +57,7 @@ const E_COUNT: u32 = 0x00007f80;
 /// # Examples
 ///
 /// ```
-/// use mayda::{Access, Encodable, Uniform};
+/// use mayda::{Access, Encode, Uniform};
 ///
 /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
 /// let mut bits = Uniform::new();
@@ -108,7 +108,7 @@ impl<B: Bits> Uniform<B> {
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, Uniform};
+  /// use mayda::{Encode, Uniform};
   ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
   /// let mut bits = Uniform::new();
@@ -129,7 +129,7 @@ impl<B: Bits> Uniform<B> {
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, Uniform};
+  /// use mayda::{Encode, Uniform};
   ///
   /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
   /// let bits = Uniform::from_slice(&input).unwrap();
@@ -164,7 +164,7 @@ impl<B: Bits> Uniform<B> {
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, Uniform};
+  /// use mayda::{Encode, Uniform};
   ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
   /// let mut bits = Uniform::new();
@@ -175,24 +175,25 @@ impl<B: Bits> Uniform<B> {
   pub fn len(&self) -> usize {
     if self.storage.is_empty() { return 0 }
 
-    let n_blks: usize = (self.storage[0] >> 2) as usize;
-    let mut length: usize = n_blks << 7;
+    let s_ptr: *const u32 = self.storage.as_ptr();
+    let n_blks: usize = unsafe {
+      (*s_ptr >> 2) as usize
+    };
 
-    let mut s_ptr: *const u32 = self.storage.as_ptr();
-    let wrd_to_blk: usize = words_to_block(n_blks, n_blks, B::width(), s_ptr);
-    unsafe {
-      s_ptr = s_ptr.offset(wrd_to_blk as isize);
-      length += ((*s_ptr & E_COUNT) >> 7) as usize;
-    }
+    let ty_wd: u32 = B::width();
+    let wrd_to_blk: usize = words_to_block(n_blks, n_blks, ty_wd, s_ptr);
+    let tail_len: usize = unsafe {
+      ((*s_ptr.offset(wrd_to_blk as isize) & E_COUNT) >> 7) as usize
+    };
 
-    length
+    n_blks << 7 + tail_len
   }
 
   /// Exposes the word storage of the `Uniform` object.
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, Uniform};
+  /// use mayda::{Encode, Uniform};
   ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
   /// let mut bits = Uniform::new();
@@ -222,7 +223,7 @@ impl<B: Bits> Uniform<B> {
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, Uniform};
+  /// use mayda::{Encode, Uniform};
   ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
   /// let mut bits = Uniform::new();
@@ -241,10 +242,10 @@ impl<B: Bits> Uniform<B> {
 ////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
-// Implementations of Encodable
+// Implementations of Encode
 ////////////////////////////////////////////////////////////////////////////////
 
-impl<B: Bits> Encodable<B> for Uniform<B> {
+impl<B: Bits> Encode<B> for Uniform<B> {
   fn encode(&mut self, input: &[B]) -> Result<(), super::Error> {
     let storage: Vec<u32> = unsafe { try!(Uniform::<B>::_encode(input)) };
     self.storage = storage.into_boxed_slice();
@@ -252,18 +253,42 @@ impl<B: Bits> Encodable<B> for Uniform<B> {
   }
 
   fn decode(&self) -> Vec<B> {
-    unsafe { Uniform::<B>::_decode(&*self.storage) }
+    // Nothing to do
+    if self.storage.is_empty() { return Vec::new() }
+
+    let s_ptr: *const u32 = self.storage.as_ptr();
+    let n_blks: usize = unsafe {
+      (*s_ptr >> 2) as usize
+    };
+
+    let ty_wd: u32 = B::width();
+    let wrd_to_blk: usize = words_to_block(n_blks, n_blks, ty_wd, s_ptr);
+    let left: usize = unsafe {
+      ((*s_ptr.offset(wrd_to_blk as isize) & E_COUNT) >> 7) as usize
+    };
+
+    let length = (n_blks << 7) + left;
+    let mut output: Vec<B> = Vec::with_capacity(length);
+    unsafe {
+      Uniform::<B>::_decode(&*self.storage, n_blks, left, &mut *output);
+      output.set_len(length);
+    }
+    output
+  }
+
+  fn decode_into(&self, output: &mut [B]) -> Result<(), super::Error> {
+    Ok(())
   }
 }
 
-/// The private interface of an `Encodable` type. Allows the implementation to
+/// The private interface of an `Encode` type. Allows the implementation to
 /// be shared for different types.
-trait EncodablePrivate<B: Bits> {
+trait EncodePrivate<B: Bits> {
   /// Encodes a slice.
   unsafe fn _encode(&[B]) -> Result<Vec<u32>, super::Error>;
 
   /// Decodes a slice.
-  unsafe fn _decode(&[u32]) -> Vec<B>;
+  unsafe fn _decode(&[u32], usize, usize, &mut [B]);
 
   /// Encodes a block with 128 or fewer elements. Returns pointer to storage.
   unsafe fn _encode_tail(_: *const B, _: *mut u32, usize, u32) -> *mut u32;
@@ -273,21 +298,21 @@ trait EncodablePrivate<B: Bits> {
 }
 
 /// Default is only to catch unimplemented types. Should not be reachable.
-impl<B: Bits> EncodablePrivate<B> for Uniform<B> {
+impl<B: Bits> EncodePrivate<B> for Uniform<B> {
   default unsafe fn _encode(_: &[B]) -> Result<Vec<u32>, super::Error> {
-    Err(super::Error::new("Encodable not implemented for this type"))
+    Err(super::Error::new("Encode not implemented for this type"))
   }
 
-  default unsafe fn _decode(_: &[u32]) -> Vec<B> {
-    panic!("Encodable not implemented for this type")
+  default unsafe fn _decode(_: &[u32], _: usize, _: usize, _: &mut [B]) {
+    panic!("Encode not implemented for this type")
   }
 
   default unsafe fn _encode_tail(_: *const B, _: *mut u32, _: usize, _: u32) -> *mut u32 {
-    panic!("Encodable not implemented for this type");
+    panic!("Encode not implemented for this type");
   }
 
   default unsafe fn _decode_tail(_: *const u32, _: *mut B, _: usize, _: u32) -> *const u32 {
-    panic!("Encodable not implemented for this type");
+    panic!("Encode not implemented for this type");
   }
 }
 
@@ -295,7 +320,7 @@ macro_rules! encodable_unsigned {
   ($(($ty: ident: $step: expr,
       $enc: ident, $dec: ident,
       $enc_simd: ident, $dec_simd: ident))*) => ($(
-    impl EncodablePrivate<$ty> for Uniform<$ty> {
+    impl EncodePrivate<$ty> for Uniform<$ty> {
       unsafe fn _encode(input: &[$ty]) -> Result<Vec<u32>, super::Error> {
         // Nothing to do
         if input.is_empty() { return Ok(Vec::new()) }
@@ -437,17 +462,10 @@ macro_rules! encodable_unsigned {
         Ok(storage)
       }
 
-      unsafe fn _decode(storage: &[u32]) -> Vec<$ty> {
-        // Nothing to do
-        if storage.is_empty() { return Vec::new() }
-
+      unsafe fn _decode(storage: &[u32], n_blks: usize, left: usize, output: &mut [$ty]) {
         // Internal representation of ty
         let ty_wd: u32 = $ty::width();
         let ty_wrd: usize = utility::words_for_bits(ty_wd);
-
-        // Read Uniform header
-        let n_blks: usize = (storage[0] >> 2) as usize;
-        let mut output: Vec<$ty> = Vec::with_capacity((n_blks + 1) << 7);
 
         // Length of index header
         let n_lvls: u32 = n_blks.bits();
@@ -484,7 +502,6 @@ macro_rules! encodable_unsigned {
 
         // Final block
         let e_wd: u32 = *s_ptr & E_WIDTH;
-        let left: usize = ((*s_ptr & E_COUNT) >> 7) as usize;
         s_ptr = s_ptr.offset(1);
 
         s_ptr = Uniform::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
@@ -493,10 +510,6 @@ macro_rules! encodable_unsigned {
         for a in 0..(left as isize) {
           *o_ptr.offset(a) = (*o_ptr.offset(a)).wrapping_add(shift);
         }
-
-        // Set the length of output AFTER everything is initialized
-        output.set_len((n_blks << 7) + left);
-        output
       }
 
       unsafe fn _encode_tail(c_ptr: *const $ty,
@@ -754,34 +767,34 @@ encodable_unsigned!{
 }
 
 #[cfg(target_pointer_width = "32")]
-impl EncodablePrivate<usize> for Uniform<usize> {
+impl EncodePrivate<usize> for Uniform<usize> {
   #[inline]
   unsafe fn _encode(storage: &[usize]) -> Result<Vec<u32>, super::Error> {
     Uniform::<u32>::_encode(mem::transmute(storage))
   }
 
   #[inline]
-  unsafe fn _decode(storage: &[u32]) -> Vec<usize> {
-    mem::transmute(Uniform::<u32>::_decode(storage))
+  unsafe fn _decode(storage: &[u32], n_blks: usize, left: usize, output: &mut [usize]) {
+    Uniform::<u32>::_decode(storage, n_blks, left, mem::transmute(output))
   }
 }
 
 #[cfg(target_pointer_width = "64")]
-impl EncodablePrivate<usize> for Uniform<usize> {
+impl EncodePrivate<usize> for Uniform<usize> {
   #[inline]
   unsafe fn _encode(storage: &[usize]) -> Result<Vec<u32>, super::Error> {
     Uniform::<u64>::_encode(mem::transmute(storage))
   }
 
   #[inline]
-  unsafe fn _decode(storage: &[u32]) -> Vec<usize> {
-    mem::transmute(Uniform::<u64>::_decode(storage))
+  unsafe fn _decode(storage: &[u32], n_blks: usize, left: usize, output: &mut [usize]) {
+    Uniform::<u64>::_decode(storage, n_blks, left, mem::transmute(output))
   }
 }
 
 macro_rules! encodable_signed {
   ($(($it: ident: $ut: ident))*) => ($(
-    impl EncodablePrivate<$it> for Uniform<$it> {
+    impl EncodePrivate<$it> for Uniform<$it> {
       unsafe fn _encode(input: &[$it]) -> Result<Vec<u32>, super::Error> {
         // Nothing to do
         if input.is_empty() { return Ok(Vec::new()) }
@@ -930,8 +943,8 @@ macro_rules! encodable_signed {
       }
 
       #[inline]
-      unsafe fn _decode(storage: &[u32]) -> Vec<$it> {
-        mem::transmute(Uniform::<$ut>::_decode(storage))
+      unsafe fn _decode(storage: &[u32], n_blks: usize, left: usize, output: &mut [$it]) {
+        Uniform::<$ut>::_decode(storage, n_blks, left, mem::transmute(output))
       }
     }
   )*)
@@ -945,28 +958,28 @@ encodable_signed!{
 }
 
 #[cfg(target_pointer_width = "32")]
-impl EncodablePrivate<isize> for Uniform<isize> {
+impl EncodePrivate<isize> for Uniform<isize> {
   #[inline]
   unsafe fn _encode(storage: &[isize]) -> Result<Vec<u32>, super::Error> {
     Uniform::<i32>::_encode(mem::transmute(storage))
   }
 
   #[inline]
-  unsafe fn _decode(storage: &[u32]) -> Vec<isize> {
-    mem::transmute(Uniform::<u32>::_decode(storage))
+  unsafe fn _decode(storage: &[u32], n_blks: usize, left: usize, output: &mut [isize]) {
+    Uniform::<u32>::_decode(storage, n_blks, left, mem::transmute(output))
   }
 }
 
 #[cfg(target_pointer_width = "64")]
-impl EncodablePrivate<isize> for Uniform<isize> {
+impl EncodePrivate<isize> for Uniform<isize> {
   #[inline]
   unsafe fn _encode(storage: &[isize]) -> Result<Vec<u32>, super::Error> {
     Uniform::<i64>::_encode(mem::transmute(storage))
   }
 
   #[inline]
-  unsafe fn _decode(storage: &[u32]) -> Vec<isize> {
-    mem::transmute(Uniform::<u64>::_decode(storage))
+  unsafe fn _decode(storage: &[u32], n_blks: usize, left: usize, output: &mut [isize]) {
+    Uniform::<u64>::_decode(storage, n_blks, left, mem::transmute(output))
   }
 }
 
@@ -1257,8 +1270,7 @@ macro_rules! access_unsigned {
 
           s_ptr = s_ptr.offset(utility::words_for_bits(e_wd * left as u32) as isize);
         }
-        let mask: $ty = { if e_wd > 0 { !0 >> (ty_wd - e_wd) } else { 0 } };
-        output &= mask;
+        output = { if e_wd > 0 { output & !0 >> (ty_wd - e_wd) } else { 0 } };
 
         let shift: $ty = *(s_ptr as *const $ty);
         output.wrapping_add(shift)

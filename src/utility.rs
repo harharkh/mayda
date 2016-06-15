@@ -23,7 +23,7 @@ pub const U64_FLAG: u32 = 0x00000003;
 
 /// Indicates that the bitwise representation of the type is known to `mayda`.
 /// Intended to be implemented only for the primitive integer types. Mainly
-/// used as a bound on the `Encodable` trait.
+/// used as a bound on the `Encode` trait.
 pub trait Bits {
   /// Number of bits in the standard representation.
   fn width() -> u32;
@@ -64,18 +64,26 @@ bits_impl!{
 /// panic to indicate that there is no available specialization for the type.
 /// This should not happen unless the user implements `Bits` for some other
 /// type or there is a library bug.
-pub trait Encodable<B: Bits> {
-  /// Encodes the slice in the `Encodable` object.
+pub trait Encode<B: Bits> {
+  /// Encodes the slice into the `Encode` object.
   ///
   /// # Errors
   ///
-  /// Returns an error if the input slice contains more than the supported
-  /// number of entries (currently 2^37 - 2^7).
+  /// By convention, returns an error if the input slice contains more than the
+  /// supported number of entries (currently 2^37 - 2^7).
   fn encode(&mut self, &[B]) -> Result<(), super::Error>;
 
-  /// Decodes the slice in the `Encodable` object. An encoded vector type must
-  /// give ownership of the returned value to the caller.
+  /// Decodes the contents of the `Encode` object. Returns a vector because
+  /// ownership of the returned value must be given to the caller.
   fn decode(&self) -> Vec<B>;
+
+  /// Decodes the contents of the `Encode` object into the slice.
+  ///
+  /// # Errors
+  ///
+  /// By convention, returns an error if the length of the slice is not equal
+  /// to the number of encoded entries.
+  fn decode_into(&self, &mut [B]) -> Result<(), super::Error>;
 }
 
 /// A trait for indexing an encoded vector. Similar to but less convenient than

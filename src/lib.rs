@@ -28,11 +28,11 @@
 //! # Example: encoding and decoding
 //!
 //! The `Uniform` struct is recommended for general purpose integer compression.
-//! Use the `Encodable` trait to encode and decode the array.
+//! Use the `Encode` trait to encode and decode the array.
 //!
 //! ```rust
 //! use std::mem;
-//! use mayda::{Uniform, Encodable};
+//! use mayda::{Uniform, Encode};
 //! 
 //! // Integers in some interval of length 255, require one byte per integer
 //! let input: Vec<u32> = (0..128).map(|x| (x * 73) % 181 + 307).collect();
@@ -57,7 +57,7 @@
 //! `Index`, but returns a vector instead of a slice.
 //!
 //! ```rust
-//! use mayda::{Uniform, Encodable, Access};
+//! use mayda::{Uniform, Encode, Access};
 //! 
 //! // All primitive integer types supported
 //! let input: Vec<i16> = (-64..64).collect();
@@ -142,13 +142,13 @@
 extern crate mayda_codec;
 
 pub mod error;
-pub mod monotone;
+//pub mod monotone;
 pub mod uniform;
-pub mod unimodal;
+//pub mod unimodal;
 pub mod utility;
 
 pub use self::error::Error;
-pub use self::monotone::Monotone;
+//pub use self::monotone::Monotone;
 pub use self::uniform::Uniform;
-pub use self::unimodal::Unimodal;
-pub use self::utility::{Access, Encodable};
+//pub use self::unimodal::Unimodal;
+pub use self::utility::{Access, Encode};

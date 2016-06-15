@@ -22,7 +22,7 @@
 //! # Examples
 //!
 //! ```
-//! use mayda::{Access, Encodable, Unimodal};
+//! use mayda::{Access, Encode, Unimodal};
 //!
 //! let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
 //! let mut bits = Unimodal::new();
@@ -42,7 +42,7 @@ use std::marker::PhantomData;
 use std::{mem, ops, ptr, usize};
 
 use mayda_codec;
-use utility::{self, Bits, Encodable, Access};
+use utility::{self, Bits, Encode, Access};
 
 const E_WIDTH: u32 = 0x0000007f;
 const E_COUNT: u32 = 0x00007f80;
@@ -51,7 +51,7 @@ const X_COUNT: u32 = 0x1fc00000;
 const I_WIDTH: u32 = 0xe0000000;
 
 /// The type of a unimodal encoded integer array. Designed for moderate
-/// compression and efficient decoding through the `Encodable` trait, and
+/// compression and efficient decoding through the `Encode` trait, and
 /// efficient random access through the `Access` trait.
 ///
 /// Support is provided for arrays with as many as (2^37 - 2^7) entries, or
@@ -61,7 +61,7 @@ const I_WIDTH: u32 = 0xe0000000;
 /// # Examples
 ///
 /// ```
-/// use mayda::{Access, Encodable, Unimodal};
+/// use mayda::{Access, Encode, Unimodal};
 ///
 /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
 /// let mut bits = Unimodal::new();
@@ -111,7 +111,7 @@ impl<B: Bits> Unimodal<B> {
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, Unimodal};
+  /// use mayda::{Encode, Unimodal};
   ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
   /// let mut bits = Unimodal::new();
@@ -132,7 +132,7 @@ impl<B: Bits> Unimodal<B> {
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, Unimodal};
+  /// use mayda::{Encode, Unimodal};
   ///
   /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
   /// let bits = Unimodal::from_slice(&input).unwrap();
@@ -167,7 +167,7 @@ impl<B: Bits> Unimodal<B> {
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, Unimodal};
+  /// use mayda::{Encode, Unimodal};
   ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
   /// let mut bits = Unimodal::new();
@@ -195,7 +195,7 @@ impl<B: Bits> Unimodal<B> {
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, Unimodal};
+  /// use mayda::{Encode, Unimodal};
   ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
   /// let mut bits = Unimodal::new();
@@ -225,7 +225,7 @@ impl<B: Bits> Unimodal<B> {
   ///
   /// # Examples
   /// ```
-  /// use mayda::{Encodable, Unimodal};
+  /// use mayda::{Encode, Unimodal};
   ///
   /// let input: Vec<u32> = vec![1, 4, 2, 8, 5, 7];
   /// let mut bits = Unimodal::new();
@@ -244,10 +244,10 @@ impl<B: Bits> Unimodal<B> {
 ////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
-// Implementations of Encodable
+// Implementations of Encode
 ////////////////////////////////////////////////////////////////////////////////
 
-impl<B: Bits> Encodable<B> for Unimodal<B> {
+impl<B: Bits> Encode<B> for Unimodal<B> {
   fn encode(&mut self, input: &[B]) -> Result<(), super::Error> {
     let storage: Vec<u32> = unsafe { try!(Unimodal::<B>::_encode(input)) };
     self.storage = storage.into_boxed_slice();
@@ -259,9 +259,9 @@ impl<B: Bits> Encodable<B> for Unimodal<B> {
   }
 }
 
-/// The private interface of an `Encodable` type. Allows the implementation to
+/// The private interface of an `Encode` type. Allows the implementation to
 /// be shared for different types.
-trait EncodablePrivate<B: Bits> {
+trait EncodePrivate<B: Bits> {
   /// Encodes a slice.
   unsafe fn _encode(&[B]) -> Result<Vec<u32>, super::Error>;
 
@@ -276,21 +276,21 @@ trait EncodablePrivate<B: Bits> {
 }
 
 /// Default is only to catch unimplemented types. Should not be reachable.
-impl<B: Bits> EncodablePrivate<B> for Unimodal<B> {
+impl<B: Bits> EncodePrivate<B> for Unimodal<B> {
   default unsafe fn _encode(_: &[B]) -> Result<Vec<u32>, super::Error> {
-    Err(super::Error::new("Encodable not implemented for this type"))
+    Err(super::Error::new("Encode not implemented for this type"))
   }
 
   default unsafe fn _decode(_: &[u32]) -> Vec<B> {
-    panic!("Encodable not implemented for this type")
+    panic!("Encode not implemented for this type")
   }
 
   default unsafe fn _encode_tail(_: *const B, _: *mut u32, _: usize, _: u32) -> *mut u32 {
-    panic!("Encodable not implemented for this type");
+    panic!("Encode not implemented for this type");
   }
 
   default unsafe fn _decode_tail(_: *const u32, _: *mut B, _: usize, _: u32) -> *const u32 {
-    panic!("Encodable not implemented for this type");
+    panic!("Encode not implemented for this type");
   }
 }
 
@@ -299,7 +299,7 @@ macro_rules! encodable_unsigned {
       $enc: ident, $dec: ident,
       $enc_simd: ident, $dec_simd: ident,
       $enc_zz: ident))*) => ($(
-    impl EncodablePrivate<$ty> for Unimodal<$ty> {
+    impl EncodePrivate<$ty> for Unimodal<$ty> {
       unsafe fn _encode(input: &[$ty]) -> Result<Vec<u32>, super::Error> {
         // Nothing to do
         if input.is_empty() { return Ok(Vec::new()) }
@@ -879,7 +879,7 @@ encodable_unsigned!{
 }
 
 #[cfg(target_pointer_width = "32")]
-impl EncodablePrivate<usize> for Unimodal<usize> {
+impl EncodePrivate<usize> for Unimodal<usize> {
   #[inline]
   unsafe fn _encode(storage: &[usize]) -> Result<Vec<u32>, super::Error> {
     Unimodal::<u32>::_encode(mem::transmute(storage))
@@ -892,7 +892,7 @@ impl EncodablePrivate<usize> for Unimodal<usize> {
 }
 
 #[cfg(target_pointer_width = "64")]
-impl EncodablePrivate<usize> for Unimodal<usize> {
+impl EncodePrivate<usize> for Unimodal<usize> {
   #[inline]
   unsafe fn _encode(storage: &[usize]) -> Result<Vec<u32>, super::Error> {
     Unimodal::<u64>::_encode(mem::transmute(storage))
@@ -906,7 +906,7 @@ impl EncodablePrivate<usize> for Unimodal<usize> {
 
 macro_rules! encodable_signed {
   ($(($it: ident: $ut: ident, $enc_zz: ident))*) => ($(
-    impl EncodablePrivate<$it> for Unimodal<$it> {
+    impl EncodePrivate<$it> for Unimodal<$it> {
       unsafe fn _encode(input: &[$it]) -> Result<Vec<u32>, super::Error> {
         // Nothing to do
         if input.is_empty() { return Ok(Vec::new()) }
@@ -1155,7 +1155,7 @@ encodable_signed!{
 }
 
 #[cfg(target_pointer_width = "32")]
-impl EncodablePrivate<isize> for Unimodal<isize> {
+impl EncodePrivate<isize> for Unimodal<isize> {
   #[inline]
   unsafe fn _encode(storage: &[isize]) -> Result<Vec<u32>, super::Error> {
     Unimodal::<i32>::_encode(mem::transmute(storage))
@@ -1168,7 +1168,7 @@ impl EncodablePrivate<isize> for Unimodal<isize> {
 }
 
 #[cfg(target_pointer_width = "64")]
-impl EncodablePrivate<isize> for Unimodal<isize> {
+impl EncodePrivate<isize> for Unimodal<isize> {
   #[inline]
   unsafe fn _encode(storage: &[isize]) -> Result<Vec<u32>, super::Error> {
     Unimodal::<i64>::_encode(mem::transmute(storage))
@@ -1468,8 +1468,7 @@ macro_rules! access_unsigned {
 
           s_ptr = s_ptr.offset(utility::words_for_bits(e_wd * left as u32) as isize);
         }
-        let mask: $ty = { if e_wd > 0 { !0 >> (ty_wd - e_wd) } else { 0 } };
-        output &= mask;
+        output = { if e_wd > 0 { output & !0 >> (ty_wd - e_wd) } else { 0 } };
 
         if x_cnt > 0 {
           let mut indices: Vec<u8> = Vec::with_capacity(x_cnt);

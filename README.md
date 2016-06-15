@@ -43,12 +43,12 @@ extern crate mayda;
 ### Example: encoding and decoding
 
 The `Uniform` struct is recommended for general purpose integer compression.
-Use the `Encodable` trait to encode and decode the array.
+Use the `Encode` trait to encode and decode the array.
 
 ```rust
 extern crate mayda;
 
-use mayda::{Uniform, Encodable};
+use mayda::{Uniform, Encode};
 
 fn main() {
 	// Integers in some interval of length 255, require one byte per integer
@@ -77,7 +77,7 @@ but returns a vector instead of a slice.
 ```rust
 extern crate mayda;
 
-use mayda::{Uniform, Encodable, Access};
+use mayda::{Uniform, Encode, Access};
 
 fn main() {
 	// All primitive integer types supported

@@ -13,7 +13,7 @@ extern crate mayda;
 extern crate rand;
 extern crate test;
 
-use mayda::{Access, Encodable, Monotone};
+use mayda::{Access, Encode, Monotone};
 use rand::distributions::{IndependentSample, Range};
 use test::Bencher;
 

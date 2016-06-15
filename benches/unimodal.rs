@@ -12,7 +12,7 @@ extern crate num;
 extern crate rand;
 extern crate test;
 
-use mayda::{Access, Encodable, Unimodal};
+use mayda::{Access, Encode, Unimodal};
 use num::{Bounded, FromPrimitive, ToPrimitive};
 use rand::distributions::{IndependentSample, Range, Normal};
 use test::Bencher;
