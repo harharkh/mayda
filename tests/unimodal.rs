@@ -13,7 +13,7 @@ extern crate mayda;
 extern crate num;
 extern crate rand;
 
-use mayda::{Access, Encodable, Unimodal};
+use mayda::{Access, Encode, Unimodal};
 use num::{Bounded, FromPrimitive, ToPrimitive};
 use rand::distributions::{IndependentSample, Range, Normal};
 

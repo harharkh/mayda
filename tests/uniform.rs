@@ -12,7 +12,7 @@
 extern crate mayda;
 extern crate rand;
 
-use mayda::{Access, Encodable, Uniform};
+use mayda::{Access, Encode, Uniform};
 use rand::distributions::{IndependentSample, Range};
 
 fn rand_uniform<T>(min: T, max: T, length: usize) -> Vec<T>

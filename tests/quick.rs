@@ -12,7 +12,7 @@
 extern crate mayda;
 extern crate quickcheck;
 
-use mayda::{Access, Encodable, Monotone, Uniform, Unimodal};
+use mayda::{Access, Encode, Monotone, Uniform, Unimodal};
 
 macro_rules! encode_decode {
   ($(($mayda_ty: ident: $int_ty: ty, $name: ident))*) => ($(
