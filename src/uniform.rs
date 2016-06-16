@@ -79,7 +79,7 @@ const E_COUNT: u32 = 0x00007f80;
 /// # Performance
 ///
 /// Decoding does not allocate except for the return value, and decodes around
-/// 14.5 GiB/s of decoded integers. Encoding allocates `O(n)` memory (`n` in
+/// 16 GiB/s of decoded integers. Encoding allocates `O(n)` memory (`n` in
 /// the length of the array), and encodes around 4 GiB/s of decoded integers.
 /// Run `cargo bench --bench uniform` for performance numbers on your setup.
 ///
@@ -256,10 +256,11 @@ impl<B: Bits> Encode<B> for Uniform<B> {
 
     let s_ptr: *const u32 = self.storage.as_ptr();
     let n_blks: usize = unsafe { (*s_ptr >> 2) as usize };
-    let mut output: Vec<B> = Vec::with_capacity((n_blks + 1) << 7);
+    let len_bnd: usize = (n_blks + 1) << 7;
+    let mut output: Vec<B> = Vec::with_capacity(len_bnd);
 
     unsafe {
-      output.set_len((n_blks + 1) << 7);
+      output.set_len(len_bnd);
       match Uniform::<B>::_decode(&*self.storage, n_blks, &mut *output) {
         Err(_) => panic!("decode did not allocate sufficient capacity"),
         Ok(length) => output.set_len(length),
@@ -447,7 +448,7 @@ macro_rules! encodable_unsigned {
           for _ in 0..l_blks {
             mayda_codec::ENCODE_SIMD_U64[l_wd as usize](l_ptr, s_ptr);
             l_ptr = l_ptr.offset(128);
-            s_ptr = s_ptr.offset(4 * l_wd as isize);
+            s_ptr = s_ptr.offset((l_wd << 2) as isize);
           }
 
           let l_left: usize = lvl.len() - (l_blks << 7);
@@ -506,7 +507,7 @@ macro_rules! encodable_unsigned {
 
           // Decode the block
           mayda_codec::$dec_simd[e_wd as usize](s_ptr, o_ptr);
-          s_ptr = s_ptr.offset(4 * e_wd as isize);
+          s_ptr = s_ptr.offset((e_wd << 2) as isize);
 
           let shift: $ty = *(s_ptr as *const $ty);
           s_ptr = s_ptr.offset(ty_wrd as isize);
@@ -942,7 +943,7 @@ macro_rules! encodable_signed {
           for _ in 0..l_blks {
             mayda_codec::ENCODE_SIMD_U64[l_wd as usize](l_ptr, s_ptr);
             l_ptr = l_ptr.offset(128);
-            s_ptr = s_ptr.offset(4 * l_wd as isize);
+            s_ptr = s_ptr.offset((l_wd << 2) as isize);
           }
 
           let l_left: usize = lvl.len() - (l_blks << 7);

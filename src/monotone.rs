@@ -168,17 +168,16 @@ impl<B: Bits> Monotone<B> {
   pub fn len(&self) -> usize {
     if self.storage.is_empty() { return 0 }
 
-    let n_blks: usize = (self.storage[0] >> 2) as usize;
-    let mut length: usize = n_blks << 7;
+    let s_ptr: *const u32 = self.storage.as_ptr();
+    let n_blks: usize = unsafe { (*s_ptr >> 2) as usize };
 
-    let mut s_ptr: *const u32 = self.storage.as_ptr();
-    let wrd_to_blk: usize = words_to_block(n_blks, n_blks, B::width(), s_ptr);
-    unsafe {
-      s_ptr = s_ptr.offset(wrd_to_blk as isize);
-      length += ((*s_ptr & E_COUNT) >> 7) as usize;
-    }
+    let ty_wd: u32 = B::width();
+    let wrd_to_blk: usize = words_to_block(n_blks, n_blks, ty_wd, s_ptr);
+    let left: usize = unsafe {
+      ((*s_ptr.offset(wrd_to_blk as isize) & E_COUNT) >> 7) as usize
+    };
 
-    length
+    (n_blks << 7) + left
   }
 
   /// Exposes the word storage of the `Monotone` object.
@@ -245,7 +244,50 @@ impl<B: Bits> Encode<B> for Monotone<B> {
   }
 
   fn decode(&self) -> Vec<B> {
-    unsafe { Monotone::<B>::_decode(&*self.storage) }
+    // Nothing to do
+    if self.storage.is_empty() { return Vec::new() }
+
+    let s_ptr: *const u32 = self.storage.as_ptr();
+    let n_blks: usize = unsafe { (*s_ptr >> 2) as usize };
+    let len_bnd: usize = (n_blks + 1) << 7;
+    let mut output: Vec<B> = Vec::with_capacity(len_bnd);
+
+    unsafe {
+      output.set_len(len_bnd);
+      match Monotone::<B>::_decode(&*self.storage, n_blks, &mut *output) {
+        Err(_) => panic!("decode did not allocate sufficient capacity"),
+        Ok(length) => output.set_len(length),
+      }
+    }
+
+    output
+  }
+
+  fn decode_into(&self, output: &mut [B]) -> Result<usize, super::Error> {
+    if self.storage.is_empty() {
+      if !output.is_empty() {
+        return Err(
+          super::Error::new(
+            &*format!("source length is 0 but slice length is {}", output.len())
+          )
+        )
+      } else {
+        return Ok(0)
+      }
+    }
+
+    let s_ptr: *const u32 = self.storage.as_ptr();
+    let n_blks: usize = unsafe { (*s_ptr >> 2) as usize };
+    let len_bnd: usize = n_blks << 7;
+    if output.len() <= len_bnd {
+      return Err(
+        super::Error::new(
+          &*format!("source length is > {} but slice length is {}", len_bnd, output.len())
+        )
+      )
+    }
+
+    unsafe { Monotone::<B>::_decode(&*self.storage, n_blks, output) }
   }
 }
 
@@ -256,7 +298,7 @@ trait EncodePrivate<B: Bits> {
   unsafe fn _encode(&[B]) -> Result<Vec<u32>, super::Error>;
 
   /// Decodes a slice.
-  unsafe fn _decode(&[u32]) -> Vec<B>;
+  unsafe fn _decode(&[u32], usize, &mut [B]) -> Result<usize, super::Error>;
 
   /// Encodes a block with 128 or fewer elements. Returns pointer to storage.
   unsafe fn _encode_tail(_: *const B, _: *mut u32, usize, u32) -> *mut u32;
@@ -271,7 +313,7 @@ impl<B: Bits> EncodePrivate<B> for Monotone<B> {
     Err(super::Error::new("Encode not implemented for this type"))
   }
 
-  default unsafe fn _decode(_: &[u32]) -> Vec<B> {
+  default unsafe fn _decode(_: &[u32], _: usize, _: &mut [B]) -> Result<usize, super::Error> {
     panic!("Encode not implemented for this type")
   }
 
@@ -348,7 +390,7 @@ macro_rules! encodable_unsigned {
         // Construct index header
         let mut lvls: Vec<Vec<u64>> = Vec::with_capacity(n_lvls);
         for a in 0..(n_lvls as isize) {
-          let length: usize = ((n_blks - (1 << a)) >> (a + 1)) + 1;
+          let length: usize = (n_blks + (1 << a)) >> (a + 1);
           let mut lvl: Vec<u64> = Vec::with_capacity(length);
           for b in (0..(length as isize)).map(|x| x << (a + 1)) {
             let mut acc: u64 = 0;
@@ -391,7 +433,7 @@ macro_rules! encodable_unsigned {
           for _ in 0..l_blks {
             mayda_codec::ENCODE_SIMD_U64[l_wd as usize](l_ptr, s_ptr);
             l_ptr = l_ptr.offset(128);
-            s_ptr = s_ptr.offset(4 * l_wd as isize);
+            s_ptr = s_ptr.offset((l_wd << 2) as isize);
           }
 
           let l_left: usize = lvl.len() - (l_blks << 7);
@@ -422,24 +464,18 @@ macro_rules! encodable_unsigned {
         Ok(storage)
       }
 
-      unsafe fn _decode(storage: &[u32]) -> Vec<$ty> {
-        // Nothing to do
-        if storage.is_empty() { return Vec::new() }
-
+      unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [$ty])
+        -> Result<usize, super::Error> {
         // Internal representation of ty
         let ty_wd: u32 = $ty::width();
         let ty_wrd: usize = utility::words_for_bits(ty_wd);
-
-        // Read Monotone header
-        let n_blks: usize = (storage[0] >> 2) as usize;
-        let mut output: Vec<$ty> = Vec::with_capacity((n_blks + 1) << 7);
 
         // Length of index header
         let n_lvls: u32 = n_blks.bits();
         let base_wd: u32  = ty_wd.bits();
         let mut h_words: usize = 0;
         for a in 0..n_lvls {
-          let len: usize = ((n_blks - (1 << a)) >> (a + 1)) + 1;
+          let len: usize = (n_blks + (1 << a)) >> (a + 1);
           h_words += utility::words_for_bits((base_wd + a) * len as u32);
         }
 
@@ -456,7 +492,7 @@ macro_rules! encodable_unsigned {
 
           // Decode the block
           mayda_codec::$dec_simd[e_wd as usize](s_ptr, o_ptr);
-          s_ptr = s_ptr.offset(4 * e_wd as isize);
+          s_ptr = s_ptr.offset((e_wd << 2) as isize);
 
           let mut acc: $ty = *(s_ptr as *const $ty);
           s_ptr = s_ptr.offset(ty_wrd as isize);
@@ -473,6 +509,15 @@ macro_rules! encodable_unsigned {
         let left: usize = ((*s_ptr & E_COUNT) >> 7) as usize;
         s_ptr = s_ptr.offset(1);
 
+        let length: usize = (n_blks << 7) + left;
+        if output.len() < length {
+          return Err(
+            super::Error::new(
+              &*format!("source length is {} but slice length is {}", length, output.len())
+            )
+          )
+        }
+
         s_ptr = Monotone::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
 
         let mut acc: $ty = *(s_ptr as *const $ty);
@@ -482,9 +527,7 @@ macro_rules! encodable_unsigned {
           o_ptr = o_ptr.offset(1);
         }
 
-        // Set the length of output AFTER everything is initialized
-        output.set_len((n_blks << 7) + left);
-        output
+        Ok(length)
       }
 
       unsafe fn _encode_tail(c_ptr: *const $ty,
@@ -753,8 +796,9 @@ impl EncodePrivate<usize> for Monotone<usize> {
   }
 
   #[inline]
-  unsafe fn _decode(storage: &[u32]) -> Vec<usize> {
-    mem::transmute(Monotone::<u32>::_decode(storage))
+  unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [usize])
+    -> Result<usize, super::Error> {
+    Monotone::<u32>::_decode(storage, n_blks, mem::transmute(output))
   }
 }
 
@@ -766,8 +810,9 @@ impl EncodePrivate<usize> for Monotone<usize> {
   }
 
   #[inline]
-  unsafe fn _decode(storage: &[u32]) -> Vec<usize> {
-    mem::transmute(Monotone::<u64>::_decode(storage))
+  unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [usize])
+    -> Result<usize, super::Error> {
+    Monotone::<u64>::_decode(storage, n_blks, mem::transmute(output))
   }
 }
 
@@ -838,7 +883,7 @@ macro_rules! encodable_signed {
         // Construct index header
         let mut lvls: Vec<Vec<u64>> = Vec::with_capacity(n_lvls);
         for a in 0..(n_lvls as isize) {
-          let length: usize = ((n_blks - (1 << a)) >> (a + 1)) + 1;
+          let length: usize = (n_blks + (1 << a)) >> (a + 1);
           let mut lvl: Vec<u64> = Vec::with_capacity(length);
           for b in (0..(length as isize)).map(|x| x << (a + 1)) {
             let mut acc: u64 = 0;
@@ -881,7 +926,7 @@ macro_rules! encodable_signed {
           for _ in 0..l_blks {
             mayda_codec::ENCODE_SIMD_U64[l_wd as usize](l_ptr, s_ptr);
             l_ptr = l_ptr.offset(128);
-            s_ptr = s_ptr.offset(4 * l_wd as isize);
+            s_ptr = s_ptr.offset((l_wd << 2) as isize);
           }
 
           let l_left: usize = lvl.len() - (l_blks << 7);
@@ -913,8 +958,9 @@ macro_rules! encodable_signed {
       }
 
       #[inline]
-      unsafe fn _decode(storage: &[u32]) -> Vec<$it> {
-        mem::transmute(Monotone::<$ut>::_decode(storage))
+      unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [$it])
+        -> Result<usize, super::Error> {
+        Monotone::<$ut>::_decode(storage, n_blks, mem::transmute(output))
       }
     }
   )*)
@@ -935,8 +981,9 @@ impl EncodePrivate<isize> for Monotone<isize> {
   }
 
   #[inline]
-  unsafe fn _decode(storage: &[u32]) -> Vec<isize> {
-    mem::transmute(Monotone::<u32>::_decode(storage))
+  unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [isize])
+    -> Result<usize, super::Error> {
+    Monotone::<u32>::_decode(storage, n_blks, left, mem::transmute(output))
   }
 }
 
@@ -948,8 +995,9 @@ impl EncodePrivate<isize> for Monotone<isize> {
   }
 
   #[inline]
-  unsafe fn _decode(storage: &[u32]) -> Vec<isize> {
-    mem::transmute(Monotone::<u64>::_decode(storage))
+  unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [isize])
+    -> Result<usize, super::Error> {
+    Monotone::<u64>::_decode(storage, n_blks, mem::transmute(output))
   }
 }
 
@@ -1161,7 +1209,7 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
   wrd_to_blk += lvl_head;
   for a in lvl..n_blks.bits() {
     let l_wd: u32 = base_wd + a;
-    let len: usize = ((n_blks - (1 << a)) >> (a + 1)) + 1;
+    let len: usize = (n_blks + (1 << a)) >> (a + 1);
     wrd_to_blk += utility::words_for_bits(l_wd * len as u32);
   }
 

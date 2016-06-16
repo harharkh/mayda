@@ -84,9 +84,9 @@ macro_rules! decode_bench {
       let mut bin = Unimodal::new();
       let input: Vec<$t> = rand_outliers($mean, $std_dev, $length);
       bin.encode(&input).unwrap();
-      let mut output = Vec::new();
+      let mut output = vec![0; $length];
       b.iter(|| {
-        output = bin.decode();
+        bin.decode_into(&mut *output).unwrap();
       });
       assert_eq!(input, output);
     }

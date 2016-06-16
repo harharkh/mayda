@@ -237,6 +237,61 @@ random_values!{
   (isize: std::isize::MIN, std::isize::MAX, 1024, cv_isize_MIN_MAX_1024)
 }
 
+macro_rules! decode_into {
+  ($(($t: ty: $min: expr, $max: expr, $length: expr, $name: ident))*) => ($(
+    #[test]
+    fn $name() {
+      let mut bin = Monotone::new();
+      let input: Vec<$t> = rand_increasing($min, $max, $length);
+      println!("{:?}", input);
+      bin.encode(&input).unwrap();
+      for a in bin.storage() { println!("{:032b}", a); }
+      let mut output = vec![0; $length + 1];
+      bin.decode_into(&mut *output).unwrap();
+      println!("{:?}", output);
+      assert_eq!(*input, output[..$length]);
+    }
+  )*)
+}
+
+decode_into!{
+  (u8: 0, 128, 513, di_u8_0_128_513)
+  (i8: -64, 64, 513, di_i8_64_64_513)
+  (u16: 0, 128, 513, di_u16_0_128_513)
+  (i16: -64, 64, 513, di_i16_64_64_513)
+  (u32: 0, 128, 513, di_u32_0_128_513)
+  (i32: -64, 64, 513, di_i32_64_64_513)
+  (u64: 0, 128, 513, di_u64_0_128_513)
+  (i64: -64, 64, 513, di_i64_64_64_513)
+}
+
+macro_rules! decode_into_panic {
+  ($(($t: ty: $min: expr, $max: expr, $length: expr, $name: ident))*) => ($(
+    #[test]
+    #[should_panic]
+    fn $name() {
+      let mut bin = Monotone::new();
+      let input: Vec<$t> = rand_increasing($min, $max, $length);
+      println!("{:?}", input);
+      bin.encode(&input).unwrap();
+      for a in bin.storage() { println!("{:032b}", a); }
+      let mut output = vec![0; $length - 1];
+      bin.decode_into(&mut *output).unwrap();
+    }
+  )*)
+}
+
+decode_into_panic!{
+  (u8: 0, 128, 513, di_pan_u8_0_128_513)
+  (i8: -64, 64, 513, di_pan_i8_64_64_513)
+  (u16: 0, 128, 513, di_pan_u16_0_128_513)
+  (i16: -64, 64, 513, di_pan_i16_64_64_513)
+  (u32: 0, 128, 513, di_pan_u32_0_128_513)
+  (i32: -64, 64, 513, di_pan_i32_64_64_513)
+  (u64: 0, 128, 513, di_pan_u64_0_128_513)
+  (i64: -64, 64, 513, di_pan_i64_64_64_513)
+}
+
 macro_rules! increasing_values {
   ($(($t: ty: $min: expr, $max: expr, $name: ident))*) => ($(
     #[test]

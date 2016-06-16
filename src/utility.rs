@@ -77,7 +77,9 @@ pub trait Encode<B: Bits> {
   /// ownership of the returned value must be given to the caller.
   fn decode(&self) -> Vec<B>;
 
-  /// Decodes the contents of the `Encode` object into the slice.
+  /// Decodes the contents of the `Encode` object into the slice. More
+  /// efficient than `decode` if the slice is already allocated, particularly
+  /// when the length is small.
   ///
   /// # Errors
   ///

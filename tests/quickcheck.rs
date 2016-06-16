@@ -29,7 +29,8 @@ encode_decode!{
   (Monotone: u8, enc_dec_mon_u8)
   (Monotone: u16, enc_dec_mon_u16)
   (Monotone: u32, enc_dec_mon_u32)
-  (Monotone: u64, enc_dec_mon_u64) (Monotone: usize, enc_dec_mon_usize)
+  (Monotone: u64, enc_dec_mon_u64)
+  (Monotone: usize, enc_dec_mon_usize)
   (Monotone: i8, enc_dec_mon_i8)
   (Monotone: i16, enc_dec_mon_i16)
   (Monotone: i32, enc_dec_mon_i32)
@@ -61,6 +62,57 @@ encode_decode!{
   (Unimodal: i32, enc_dec_umd_i32)
   (Unimodal: i64, enc_dec_umd_i64)
   (Unimodal: isize, enc_dec_umd_isize)
+}
+
+macro_rules! encode_f_decode_i {
+  ($(($mayda_ty: ident: $int_ty: ty, $name: ident))*) => ($(
+    #[quickcheck]
+    fn $name(input: Vec<$int_ty>) -> bool {
+      let bin = $mayda_ty::from_slice(&*input).unwrap();
+      let mut output: Vec<$int_ty> = vec![0; input.len()];
+      bin.decode_into(&mut *output).unwrap();
+      input == output
+    }
+  )*)
+}
+
+encode_f_decode_i!{
+  (Monotone: u8, enc_f_dec_i_mon_u8)
+  (Monotone: u16, enc_f_dec_i_mon_u16)
+  (Monotone: u32, enc_f_dec_i_mon_u32)
+  (Monotone: u64, enc_f_dec_i_mon_u64)
+  (Monotone: usize, enc_f_dec_i_mon_usize)
+  (Monotone: i8, enc_f_dec_i_mon_i8)
+  (Monotone: i16, enc_f_dec_i_mon_i16)
+  (Monotone: i32, enc_f_dec_i_mon_i32)
+  (Monotone: i64, enc_f_dec_i_mon_i64)
+  (Monotone: isize, enc_f_dec_i_mon_isize)
+}
+
+encode_f_decode_i!{
+  (Uniform: u8, enc_f_dec_i_unf_u8)
+  (Uniform: u16, enc_f_dec_i_unf_u16)
+  (Uniform: u32, enc_f_dec_i_unf_u32)
+  (Uniform: u64, enc_f_dec_i_unf_u64)
+  (Uniform: usize, enc_f_dec_i_unf_usize)
+  (Uniform: i8, enc_f_dec_i_unf_i8)
+  (Uniform: i16, enc_f_dec_i_unf_i16)
+  (Uniform: i32, enc_f_dec_i_unf_i32)
+  (Uniform: i64, enc_f_dec_i_unf_i64)
+  (Uniform: isize, enc_f_dec_i_unf_isize)
+}
+
+encode_f_decode_i!{
+  (Unimodal: u8, enc_f_dec_i_umd_u8)
+  (Unimodal: u16, enc_f_dec_i_umd_u16)
+  (Unimodal: u32, enc_f_dec_i_umd_u32)
+  (Unimodal: u64, enc_f_dec_i_umd_u64)
+  (Unimodal: usize, enc_f_dec_i_umd_usize)
+  (Unimodal: i8, enc_f_dec_i_umd_i8)
+  (Unimodal: i16, enc_f_dec_i_umd_i16)
+  (Unimodal: i32, enc_f_dec_i_umd_i32)
+  (Unimodal: i64, enc_f_dec_i_umd_i64)
+  (Unimodal: isize, enc_f_dec_i_umd_isize)
 }
 
 macro_rules! indexing {
