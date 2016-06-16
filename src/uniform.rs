@@ -273,6 +273,7 @@ impl<B: Bits> Encode<B> for Uniform<B> {
       Uniform::<B>::_decode(&*self.storage, n_blks, left, &mut *output);
       output.set_len(length);
     }
+
     output
   }
 
@@ -311,6 +312,7 @@ impl<B: Bits> Encode<B> for Uniform<B> {
     unsafe {
       Uniform::<B>::_decode(&*self.storage, n_blks, left, output);
     }
+
     Ok(())
   }
 }
