@@ -176,9 +176,7 @@ impl<B: Bits> Uniform<B> {
     if self.storage.is_empty() { return 0 }
 
     let s_ptr: *const u32 = self.storage.as_ptr();
-    let n_blks: usize = unsafe {
-      (*s_ptr >> 2) as usize
-    };
+    let n_blks: usize = unsafe { (*s_ptr >> 2) as usize };
 
     let ty_wd: u32 = B::width();
     let wrd_to_blk: usize = words_to_block(n_blks, n_blks, ty_wd, s_ptr);
@@ -257,27 +255,21 @@ impl<B: Bits> Encode<B> for Uniform<B> {
     if self.storage.is_empty() { return Vec::new() }
 
     let s_ptr: *const u32 = self.storage.as_ptr();
-    let n_blks: usize = unsafe {
-      (*s_ptr >> 2) as usize
-    };
+    let n_blks: usize = unsafe { (*s_ptr >> 2) as usize };
+    let mut output: Vec<B> = Vec::with_capacity((n_blks + 1) << 7);
 
-    let ty_wd: u32 = B::width();
-    let wrd_to_blk: usize = words_to_block(n_blks, n_blks, ty_wd, s_ptr);
-    let left: usize = unsafe {
-      ((*s_ptr.offset(wrd_to_blk as isize) & E_COUNT) >> 7) as usize
-    };
-
-    let length: usize = (n_blks << 7) + left;
-    let mut output: Vec<B> = Vec::with_capacity(length);
     unsafe {
-      Uniform::<B>::_decode(&*self.storage, n_blks, left, &mut *output);
-      output.set_len(length);
+      output.set_len((n_blks + 1) << 7);
+      match Uniform::<B>::_decode(&*self.storage, n_blks, &mut *output) {
+        Err(_) => panic!("decode did not allocate sufficient capacity"),
+        Ok(length) => output.set_len(length),
+      }
     }
 
     output
   }
 
-  fn decode_into(&self, output: &mut [B]) -> Result<(), super::Error> {
+  fn decode_into(&self, output: &mut [B]) -> Result<usize, super::Error> {
     if self.storage.is_empty() {
       if !output.is_empty() {
         return Err(
@@ -286,34 +278,22 @@ impl<B: Bits> Encode<B> for Uniform<B> {
           )
         )
       } else {
-        return Ok(())
+        return Ok(0)
       }
     }
 
     let s_ptr: *const u32 = self.storage.as_ptr();
-    let n_blks: usize = unsafe {
-      (*s_ptr >> 2) as usize
-    };
-
-    let ty_wd: u32 = B::width();
-    let wrd_to_blk: usize = words_to_block(n_blks, n_blks, ty_wd, s_ptr);
-    let left: usize = unsafe {
-      ((*s_ptr.offset(wrd_to_blk as isize) & E_COUNT) >> 7) as usize
-    };
-
-    let length: usize = (n_blks << 7) + left;
-    if output.len() != length {
+    let n_blks: usize = unsafe { (*s_ptr >> 2) as usize };
+    let len_bnd: usize = n_blks << 7;
+    if output.len() <= len_bnd {
       return Err(
         super::Error::new(
-          &*format!("source length is {} but slice length is {}", length, output.len())
+          &*format!("source length is > {} but slice length is {}", len_bnd, output.len())
         )
       )
     }
-    unsafe {
-      Uniform::<B>::_decode(&*self.storage, n_blks, left, output);
-    }
 
-    Ok(())
+    unsafe { Uniform::<B>::_decode(&*self.storage, n_blks, output) }
   }
 }
 
@@ -324,7 +304,7 @@ trait EncodePrivate<B: Bits> {
   unsafe fn _encode(&[B]) -> Result<Vec<u32>, super::Error>;
 
   /// Decodes a slice.
-  unsafe fn _decode(&[u32], usize, usize, &mut [B]);
+  unsafe fn _decode(&[u32], usize, &mut [B]) -> Result<usize, super::Error>;
 
   /// Encodes a block with 128 or fewer elements. Returns pointer to storage.
   unsafe fn _encode_tail(_: *const B, _: *mut u32, usize, u32) -> *mut u32;
@@ -339,7 +319,7 @@ impl<B: Bits> EncodePrivate<B> for Uniform<B> {
     Err(super::Error::new("Encode not implemented for this type"))
   }
 
-  default unsafe fn _decode(_: &[u32], _: usize, _: usize, _: &mut [B]) {
+  default unsafe fn _decode(_: &[u32], _: usize, _: &mut [B]) -> Result<usize, super::Error> {
     panic!("Encode not implemented for this type")
   }
 
@@ -424,7 +404,7 @@ macro_rules! encodable_unsigned {
         // Construct index header
         let mut lvls: Vec<Vec<u64>> = Vec::with_capacity(n_lvls);
         for a in 0..(n_lvls as isize) {
-          let length: usize = ((n_blks - (1 << a)) >> (a + 1)) + 1;
+          let length: usize = (n_blks + (1 << a)) >> (a + 1);
           let mut lvl: Vec<u64> = Vec::with_capacity(length);
           for b in (0..(length as isize)).map(|x| x << (a + 1)) {
             let mut acc: u64 = 0;
@@ -498,7 +478,8 @@ macro_rules! encodable_unsigned {
         Ok(storage)
       }
 
-      unsafe fn _decode(storage: &[u32], n_blks: usize, left: usize, output: &mut [$ty]) {
+      unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [$ty])
+        -> Result<usize, super::Error> {
         // Internal representation of ty
         let ty_wd: u32 = $ty::width();
         let ty_wrd: usize = utility::words_for_bits(ty_wd);
@@ -508,7 +489,7 @@ macro_rules! encodable_unsigned {
         let base_wd: u32  = ty_wd.bits();
         let mut h_words: usize = 0;
         for a in 0..n_lvls {
-          let len: usize = ((n_blks - (1 << a)) >> (a + 1)) + 1;
+          let len: usize = (n_blks + (1 << a)) >> (a + 1);
           h_words += utility::words_for_bits((base_wd + a) * len as u32);
         }
 
@@ -538,7 +519,17 @@ macro_rules! encodable_unsigned {
 
         // Final block
         let e_wd: u32 = *s_ptr & E_WIDTH;
+        let left: usize = ((*s_ptr & E_COUNT) >> 7) as usize;
         s_ptr = s_ptr.offset(1);
+
+        let length: usize = (n_blks << 7) + left;
+        if output.len() < length {
+          return Err(
+            super::Error::new(
+              &*format!("source length is {} but slice length is {}", length, output.len())
+            )
+          )
+        }
 
         s_ptr = Uniform::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
 
@@ -546,6 +537,8 @@ macro_rules! encodable_unsigned {
         for a in 0..(left as isize) {
           *o_ptr.offset(a) = (*o_ptr.offset(a)).wrapping_add(shift);
         }
+
+        Ok(length)
       }
 
       unsafe fn _encode_tail(c_ptr: *const $ty,
@@ -810,8 +803,9 @@ impl EncodePrivate<usize> for Uniform<usize> {
   }
 
   #[inline]
-  unsafe fn _decode(storage: &[u32], n_blks: usize, left: usize, output: &mut [usize]) {
-    Uniform::<u32>::_decode(storage, n_blks, left, mem::transmute(output))
+  unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [usize])
+    -> Result<usize, super::Error> {
+    Uniform::<u32>::_decode(storage, n_blks, mem::transmute(output))
   }
 }
 
@@ -823,8 +817,9 @@ impl EncodePrivate<usize> for Uniform<usize> {
   }
 
   #[inline]
-  unsafe fn _decode(storage: &[u32], n_blks: usize, left: usize, output: &mut [usize]) {
-    Uniform::<u64>::_decode(storage, n_blks, left, mem::transmute(output))
+  unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [usize])
+    -> Result<usize, super::Error> {
+    Uniform::<u64>::_decode(storage, n_blks, mem::transmute(output))
   }
 }
 
@@ -904,7 +899,7 @@ macro_rules! encodable_signed {
         // Construct index header
         let mut lvls: Vec<Vec<u64>> = Vec::with_capacity(n_lvls);
         for a in 0..(n_lvls as isize) {
-          let length: usize = ((n_blks - (1 << a)) >> (a + 1)) + 1;
+          let length: usize = (n_blks + (1 << a)) >> (a + 1);
           let mut lvl: Vec<u64> = Vec::with_capacity(length);
           for b in (0..(length as isize)).map(|x| x << (a + 1)) {
             let mut acc: u64 = 0;
@@ -979,8 +974,9 @@ macro_rules! encodable_signed {
       }
 
       #[inline]
-      unsafe fn _decode(storage: &[u32], n_blks: usize, left: usize, output: &mut [$it]) {
-        Uniform::<$ut>::_decode(storage, n_blks, left, mem::transmute(output))
+      unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [$it])
+        -> Result<usize, super::Error> {
+        Uniform::<$ut>::_decode(storage, n_blks, mem::transmute(output))
       }
     }
   )*)
@@ -1001,7 +997,8 @@ impl EncodePrivate<isize> for Uniform<isize> {
   }
 
   #[inline]
-  unsafe fn _decode(storage: &[u32], n_blks: usize, left: usize, output: &mut [isize]) {
+  unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [isize])
+    -> Result<usize, super::Error> {
     Uniform::<u32>::_decode(storage, n_blks, left, mem::transmute(output))
   }
 }
@@ -1014,8 +1011,9 @@ impl EncodePrivate<isize> for Uniform<isize> {
   }
 
   #[inline]
-  unsafe fn _decode(storage: &[u32], n_blks: usize, left: usize, output: &mut [isize]) {
-    Uniform::<u64>::_decode(storage, n_blks, left, mem::transmute(output))
+  unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [isize])
+    -> Result<usize, super::Error> {
+    Uniform::<u64>::_decode(storage, n_blks, mem::transmute(output))
   }
 }
 

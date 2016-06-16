@@ -81,9 +81,9 @@ pub trait Encode<B: Bits> {
   ///
   /// # Errors
   ///
-  /// By convention, returns an error if the length of the slice is not equal
-  /// to the number of encoded entries.
-  fn decode_into(&self, &mut [B]) -> Result<(), super::Error>;
+  /// By convention, returns the number of decoded entries or an error if the
+  /// length of the slice is not sufficient.
+  fn decode_into(&self, &mut [B]) -> Result<usize, super::Error>;
 }
 
 /// A trait for indexing an encoded vector. Similar to but less convenient than
