@@ -246,8 +246,9 @@ macro_rules! decode_into {
       bin.encode(&input).unwrap();
       for a in bin.storage() { println!("{:032b}", a); }
       let mut output = vec![0; $length + 1];
-      bin.decode_into(&mut *output).unwrap();
+      let length: usize = bin.decode_into(&mut *output);
       println!("{:?}", output);
+      assert_eq!($length, length);
       assert_eq!(*input, output[..$length]);
     }
   )*)
@@ -275,7 +276,7 @@ macro_rules! decode_into_panic {
       bin.encode(&input).unwrap();
       for a in bin.storage() { println!("{:032b}", a); }
       let mut output = vec![0; $length - 1];
-      bin.decode_into(&mut *output).unwrap();
+      bin.decode_into(&mut *output);
     }
   )*)
 }

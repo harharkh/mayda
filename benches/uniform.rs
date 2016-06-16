@@ -75,7 +75,7 @@ macro_rules! decode_bench {
       bin.encode(&input).unwrap();
       let mut output = vec![0; $length];
       b.iter(|| {
-        bin.decode_into(&mut *output).unwrap();
+        bin.decode_into(&mut *output);
       });
       assert_eq!(input, output);
     }

@@ -70,7 +70,7 @@ macro_rules! encode_f_decode_i {
     fn $name(input: Vec<$int_ty>) -> bool {
       let bin = $mayda_ty::from_slice(&*input).unwrap();
       let mut output: Vec<$int_ty> = vec![0; input.len()];
-      bin.decode_into(&mut *output).unwrap();
+      bin.decode_into(&mut *output);
       input == output
     }
   )*)

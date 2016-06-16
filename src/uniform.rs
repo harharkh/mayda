@@ -134,8 +134,9 @@ impl<B: Bits> Uniform<B> {
   /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
   /// let bits = Uniform::from_slice(&input).unwrap();
   ///
-  /// let output = bits.decode();
-  /// assert_eq!(input, output);
+  /// let mut output: Vec<u32> = vec![0; 8];
+  /// let length: usize = bits.decode_into(&mut *output);
+  /// assert_eq!(*input, output[..length]);
   /// ```
   #[inline]
   pub fn from_slice(slice: &[B]) -> Result<Self, super::Error> {
@@ -160,7 +161,8 @@ impl<B: Bits> Uniform<B> {
     self.storage.is_empty()
   }
 
-  /// Returns the number of encoded entries.
+  /// Returns the number of encoded entries. Note that since the length has to
+  /// be calculated, `Uniform::len()` is slower than `Slice::len()`.
   ///
   /// # Examples
   /// ```
@@ -261,37 +263,25 @@ impl<B: Bits> Encode<B> for Uniform<B> {
 
     unsafe {
       output.set_len(len_bnd);
-      match Uniform::<B>::_decode(&*self.storage, n_blks, &mut *output) {
-        Err(_) => panic!("decode did not allocate sufficient capacity"),
-        Ok(length) => output.set_len(length),
-      }
+      let length: usize = Uniform::<B>::_decode(&*self.storage, n_blks, &mut *output);
+      output.set_len(length);
     }
 
     output
   }
 
-  fn decode_into(&self, output: &mut [B]) -> Result<usize, super::Error> {
+  fn decode_into(&self, output: &mut [B]) -> usize {
     if self.storage.is_empty() {
-      if !output.is_empty() {
-        return Err(
-          super::Error::new(
-            &*format!("source length is 0 but slice length is {}", output.len())
-          )
-        )
-      } else {
-        return Ok(0)
-      }
+      return 0
     }
 
     let s_ptr: *const u32 = self.storage.as_ptr();
     let n_blks: usize = unsafe { (*s_ptr >> 2) as usize };
     let len_bnd: usize = n_blks << 7;
     if output.len() <= len_bnd {
-      return Err(
-        super::Error::new(
-          &*format!("source length is > {} but slice length is {}", len_bnd, output.len())
-        )
-      )
+      panic!(
+        format!("source length is > {} but slice length is {}", len_bnd, output.len())
+      );
     }
 
     unsafe { Uniform::<B>::_decode(&*self.storage, n_blks, output) }
@@ -305,7 +295,7 @@ trait EncodePrivate<B: Bits> {
   unsafe fn _encode(&[B]) -> Result<Vec<u32>, super::Error>;
 
   /// Decodes a slice.
-  unsafe fn _decode(&[u32], usize, &mut [B]) -> Result<usize, super::Error>;
+  unsafe fn _decode(&[u32], usize, &mut [B]) -> usize;
 
   /// Encodes a block with 128 or fewer elements. Returns pointer to storage.
   unsafe fn _encode_tail(_: *const B, _: *mut u32, usize, u32) -> *mut u32;
@@ -320,7 +310,7 @@ impl<B: Bits> EncodePrivate<B> for Uniform<B> {
     Err(super::Error::new("Encode not implemented for this type"))
   }
 
-  default unsafe fn _decode(_: &[u32], _: usize, _: &mut [B]) -> Result<usize, super::Error> {
+  default unsafe fn _decode(_: &[u32], _: usize, _: &mut [B]) -> usize {
     panic!("Encode not implemented for this type")
   }
 
@@ -479,8 +469,7 @@ macro_rules! encodable_unsigned {
         Ok(storage)
       }
 
-      unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [$ty])
-        -> Result<usize, super::Error> {
+      unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [$ty]) -> usize {
         // Internal representation of ty
         let ty_wd: u32 = $ty::width();
         let ty_wrd: usize = utility::words_for_bits(ty_wd);
@@ -525,11 +514,9 @@ macro_rules! encodable_unsigned {
 
         let length: usize = (n_blks << 7) + left;
         if output.len() < length {
-          return Err(
-            super::Error::new(
-              &*format!("source length is {} but slice length is {}", length, output.len())
-            )
-          )
+          panic!(
+            format!("source length is {} but slice length is {}", length, output.len())
+          );
         }
 
         s_ptr = Uniform::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
@@ -539,7 +526,7 @@ macro_rules! encodable_unsigned {
           *o_ptr.offset(a) = (*o_ptr.offset(a)).wrapping_add(shift);
         }
 
-        Ok(length)
+        length
       }
 
       unsafe fn _encode_tail(c_ptr: *const $ty,
@@ -804,8 +791,7 @@ impl EncodePrivate<usize> for Uniform<usize> {
   }
 
   #[inline]
-  unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [usize])
-    -> Result<usize, super::Error> {
+  unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [usize]) -> usize {
     Uniform::<u32>::_decode(storage, n_blks, mem::transmute(output))
   }
 }
@@ -818,8 +804,7 @@ impl EncodePrivate<usize> for Uniform<usize> {
   }
 
   #[inline]
-  unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [usize])
-    -> Result<usize, super::Error> {
+  unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [usize]) -> usize {
     Uniform::<u64>::_decode(storage, n_blks, mem::transmute(output))
   }
 }
@@ -975,8 +960,7 @@ macro_rules! encodable_signed {
       }
 
       #[inline]
-      unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [$it])
-        -> Result<usize, super::Error> {
+      unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [$it]) -> usize {
         Uniform::<$ut>::_decode(storage, n_blks, mem::transmute(output))
       }
     }
@@ -998,8 +982,7 @@ impl EncodePrivate<isize> for Uniform<isize> {
   }
 
   #[inline]
-  unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [isize])
-    -> Result<usize, super::Error> {
+  unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [isize]) -> usize {
     Uniform::<u32>::_decode(storage, n_blks, left, mem::transmute(output))
   }
 }
@@ -1012,8 +995,7 @@ impl EncodePrivate<isize> for Uniform<isize> {
   }
 
   #[inline]
-  unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [isize])
-    -> Result<usize, super::Error> {
+  unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [isize]) -> usize {
     Uniform::<u64>::_decode(storage, n_blks, mem::transmute(output))
   }
 }

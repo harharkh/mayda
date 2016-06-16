@@ -77,15 +77,14 @@ pub trait Encode<B: Bits> {
   /// ownership of the returned value must be given to the caller.
   fn decode(&self) -> Vec<B>;
 
-  /// Decodes the contents of the `Encode` object into the slice. More
-  /// efficient than `decode` if the slice is already allocated, particularly
-  /// when the length is small.
+  /// Decodes the contents of the `Encode` object into the slice. Slightly more
+  /// efficient than `decode` if the slice is already allocated. Returns the
+  /// number of decoded entries.
   ///
-  /// # Errors
+  /// # Panics
   ///
-  /// By convention, returns the number of decoded entries, or an error if the
-  /// length of the slice is insufficient.
-  fn decode_into(&self, &mut [B]) -> Result<usize, super::Error>;
+  /// By convention, panics if the slice is of insufficient length.
+  fn decode_into(&self, &mut [B]) -> usize;
 }
 
 /// A trait for indexing an encoded vector. Similar to but less convenient than
