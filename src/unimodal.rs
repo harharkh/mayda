@@ -1276,7 +1276,6 @@ impl<B: Bits> Access<ops::RangeToInclusive<usize>> for Unimodal<B> {
 /// Calculates the offset in words to the start of the block. Not intended to
 /// be used outside the implementation of `Access`.
 fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> usize {
-  // Find the block containing the index
   let base_wd: u32 = ty_wd.bits() + 2;
   let mut lvl: u32 = 0;
   let mut lvl_head: usize = 1;

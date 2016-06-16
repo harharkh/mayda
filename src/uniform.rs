@@ -1115,7 +1115,6 @@ impl<B: Bits> Access<ops::RangeToInclusive<usize>> for Uniform<B> {
 fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> usize {
   let ty_wrd: usize = utility::words_for_bits(ty_wd);
 
-  // Find the block containing the index
   let base_wd: u32 = ty_wd.bits();
   let mut lvl: u32 = 0;
   let mut lvl_head: usize = 1;
@@ -1130,28 +1129,28 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
     let shift: u32 = w_idx.trailing_zeros() + 1;
     for _ in 1..shift {
       let l_wd: u32 = base_wd + lvl;
-      let len: usize = ((n_blks - (1 << lvl)) >> (lvl + 1)) + 1;
+      let len: usize = (n_blks + (1 << lvl)) >> (lvl + 1);
       lvl_head += utility::words_for_bits(l_wd * len as u32);
       lvl += 1;
     }
     w_idx >>= shift;
 
     let l_wd: u32 = base_wd + lvl;
-    let len: usize = ((n_blks - (1 << lvl)) >> (lvl + 1)) + 1;
+    let len: usize = (n_blks + (1 << lvl)) >> (lvl + 1);
     unsafe {
       s_ptr = s_head.offset(lvl_head as isize);
       if (w_idx & !127) + 128 <= len {
         // Width encoded using SIMD
-        let l_bits: u32 = (w_idx as u32 / 2) * l_wd;
+        let l_bits: u32 = (w_idx as u32 >> 1) * l_wd;
         let w_bits: u32 = 64 - (l_bits & 63);
 
         let mut w_ptr: *const u64 = s_ptr as *const u64;
-        w_ptr = w_ptr.offset(((w_idx as u32 & 1) + (l_bits / 64) * 2) as isize);
+        let w_sft: u32 = ((l_bits >> 5) & !1) | (w_idx as u32 & 1); 
+        w_ptr = w_ptr.offset(w_sft as isize);
 
         output = *w_ptr >> (64 - w_bits);
         if l_wd > w_bits {
-          w_ptr = w_ptr.offset(2);
-          output |= *w_ptr << w_bits;
+          output |= *w_ptr.offset(2) << w_bits;
         }
       } else {
         // Width encoded using u32
@@ -1159,7 +1158,7 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
         let mut s_bits: u32 = 32 - (l_bits & 31);
         let mut o_bits: u32 = l_wd;
 
-        s_ptr = s_ptr.offset((l_bits / 32) as isize);
+        s_ptr = s_ptr.offset((l_bits >> 5) as isize);
 
         output = (*s_ptr >> (32 - s_bits)) as u64;
         while o_bits > s_bits {
@@ -1177,28 +1176,28 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
       let shift: u32 = w_idx.trailing_zeros() + 1;
       for _ in 0..shift {
         let l_wd: u32 = base_wd + lvl;
-        let len: usize = ((n_blks - (1 << lvl)) >> (lvl + 1)) + 1;
+        let len: usize = (n_blks + (1 << lvl)) >> (lvl + 1);
         lvl_head += utility::words_for_bits(l_wd * len as u32);
         lvl += 1;
       }
       w_idx >>= shift;
 
       let l_wd: u32 = base_wd + lvl;
-      let len: usize = ((n_blks - (1 << lvl)) >> (lvl + 1)) + 1;
+      let len: usize = (n_blks + (1 << lvl)) >> (lvl + 1);
       unsafe {
         s_ptr = s_head.offset(lvl_head as isize);
         if (w_idx & !127) + 128 <= len {
           // Width encoded using SIMD
-          let l_bits: u32 = (w_idx as u32 / 2) * l_wd;
+          let l_bits: u32 = (w_idx as u32 >> 1) * l_wd;
           let w_bits: u32 = 64 - (l_bits & 63);
 
           let mut w_ptr: *const u64 = s_ptr as *const u64;
-          w_ptr = w_ptr.offset(((w_idx as u32 & 1) + (l_bits / 64) * 2) as isize);
+          let w_sft: u32 = ((l_bits >> 5) & !1) | (w_idx as u32 & 1); 
+          w_ptr = w_ptr.offset(w_sft as isize);
 
           output = *w_ptr >> (64 - w_bits);
           if l_wd > w_bits {
-            w_ptr = w_ptr.offset(2);
-            output |= *w_ptr << w_bits;
+            output |= *w_ptr.offset(2) << w_bits;
           }
         } else {
           // Width encoded using u32
@@ -1206,7 +1205,7 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
           let mut s_bits: u32 = 32 - (bits & 31);
           let mut o_bits: u32 = l_wd;
 
-          s_ptr = s_ptr.offset((bits / 32) as isize);
+          s_ptr = s_ptr.offset((bits >> 5) as isize);
 
           output = (*s_ptr >> (32 - s_bits)) as u64;
           while o_bits > s_bits {
@@ -1219,14 +1218,14 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
       }
       wrd_to_blk += (output & (!0 >> (64 - l_wd))) as usize;
     }
-    wrd_to_blk = blk * (1 + ty_wrd) + 4 * wrd_to_blk;
+    wrd_to_blk = blk * (1 + ty_wrd) + (wrd_to_blk << 2);
   }
 
   // Include the header words
   wrd_to_blk += lvl_head;
   for a in lvl..n_blks.bits() {
     let l_wd: u32 = base_wd + a;
-    let len: usize = ((n_blks - (1 << a)) >> (a + 1)) + 1;
+    let len: usize = (n_blks + (1 << a)) >> (a + 1);
     wrd_to_blk += utility::words_for_bits(l_wd * len as u32);
   }
 

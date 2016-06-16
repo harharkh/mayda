@@ -1051,7 +1051,6 @@ impl<B: Bits> Access<ops::RangeToInclusive<usize>> for Monotone<B> {
 fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> usize {
   let ty_wrd: usize = utility::words_for_bits(ty_wd);
 
-  // Find the block containing the index
   let base_wd: u32 = ty_wd.bits();
   let mut lvl: u32 = 0;
   let mut lvl_head: usize = 1;
