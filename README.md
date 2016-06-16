@@ -31,7 +31,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-mayda = "0.1"
+mayda = "^0.1"
 ```
 
 and this to your crate root:

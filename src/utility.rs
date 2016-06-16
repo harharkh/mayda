@@ -70,7 +70,7 @@ pub trait Encode<B: Bits> {
   /// # Errors
   ///
   /// By convention, returns an error if the input slice contains more than the
-  /// supported number of entries (currently 2^37 - 2^7).
+  /// supported number of entries (currently 2<sup>37</sup> - 2<sup>7</sup>).
   fn encode(&mut self, &[B]) -> Result<(), super::Error>;
 
   /// Decodes the contents of the `Encode` object. Returns a vector because
@@ -83,8 +83,8 @@ pub trait Encode<B: Bits> {
   ///
   /// # Errors
   ///
-  /// By convention, returns the number of decoded entries or an error if the
-  /// length of the slice is not sufficient.
+  /// By convention, returns the number of decoded entries, or an error if the
+  /// length of the slice is insufficient.
   fn decode_into(&self, &mut [B]) -> Result<usize, super::Error>;
 }
 
