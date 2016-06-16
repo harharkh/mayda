@@ -1148,19 +1148,19 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
         let w_sft: u32 = ((l_bits >> 5) & !1) | (w_idx as u32 & 1); 
         w_ptr = w_ptr.offset(w_sft as isize);
 
-        output = *w_ptr >> (64 - w_bits);
+        output = *w_ptr >> (l_bits & 63);
         if l_wd > w_bits {
           output |= *w_ptr.offset(2) << w_bits;
         }
       } else {
         // Width encoded using u32
-        let l_bits: u32 = w_idx as u32 * l_wd;
-        let mut s_bits: u32 = 32 - (l_bits & 31);
+        let bits: u32 = w_idx as u32 * l_wd;
+        let mut s_bits: u32 = 32 - (bits & 31);
         let mut o_bits: u32 = l_wd;
 
-        s_ptr = s_ptr.offset((l_bits >> 5) as isize);
+        s_ptr = s_ptr.offset((bits >> 5) as isize);
 
-        output = (*s_ptr >> (32 - s_bits)) as u64;
+        output = (*s_ptr >> (bits & 31)) as u64;
         while o_bits > s_bits {
           o_bits -= s_bits;
           s_ptr = s_ptr.offset(1);
@@ -1195,7 +1195,7 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
           let w_sft: u32 = ((l_bits >> 5) & !1) | (w_idx as u32 & 1); 
           w_ptr = w_ptr.offset(w_sft as isize);
 
-          output = *w_ptr >> (64 - w_bits);
+          output = *w_ptr >> (l_bits & 63);
           if l_wd > w_bits {
             output |= *w_ptr.offset(2) << w_bits;
           }
@@ -1207,7 +1207,7 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
 
           s_ptr = s_ptr.offset((bits >> 5) as isize);
 
-          output = (*s_ptr >> (32 - s_bits)) as u64;
+          output = (*s_ptr >> (bits & 31)) as u64;
           while o_bits > s_bits {
             o_bits -= s_bits;
             s_ptr = s_ptr.offset(1);
