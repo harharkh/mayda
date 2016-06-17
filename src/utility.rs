@@ -77,9 +77,9 @@ pub trait Encode<B: Bits> {
   /// ownership of the returned value must be given to the caller.
   fn decode(&self) -> Vec<B>;
 
-  /// Decodes the contents of the `Encode` object into the slice. Slightly more
-  /// efficient than `decode` if the slice is already allocated. Returns the
-  /// number of decoded entries.
+  /// Decodes the contents of the `Encode` object and writes the result into
+  /// the slice provided. More efficient than `decode` if the slice is already
+  /// allocated. Returns the number of decoded entries.
   ///
   /// # Panics
   ///
@@ -93,17 +93,33 @@ pub trait Encode<B: Bits> {
 ///
 /// # Panics
 ///
-/// By convention, all implementations panic when the index is out of bounds.
+/// By convention, panics when the index is out of bounds.
 ///
 /// The default implementations of `access` panic to indicate that there is no
-/// available specialization for the type. This should not happen unless the
-/// user implements `Bits` for some other type or there is a library bug.
+/// available specialization for the type. This should not happen unless there
+/// is a library bug.
 pub trait Access<Idx> {
   /// The type returned by the access operation.
   type Output;
 
   /// The method for the access `foo.access(bar)` operation.
-  fn access(&self, index: Idx) -> Self::Output;
+  fn access(&self, Idx) -> Self::Output;
+}
+
+/// A trait for indexing a range of an encoded vector. Writes the result into
+/// the slice provided. Similar to but less convenient than `Index`.
+///
+/// # Panics
+///
+/// By convention, panics when the index is out of bounds or the slice is of
+/// insufficient length.
+///
+/// The default implementations of `access_into` panic to indicate that there
+/// is no available specialization for the type. This should not happen unless
+/// there is a library bug.
+pub trait AccessInto<Idx, B: Bits>: Access<Idx> {
+  /// The method for the access `foo.access_into(bar, slice)` operation.
+  fn access_into(&self, Idx, &mut [B]) -> usize;
 }
 
 /// Returns number of words required to store the given number of bits. A word

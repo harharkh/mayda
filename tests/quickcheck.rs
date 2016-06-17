@@ -178,7 +178,7 @@ macro_rules! range {
       bin.encode(&input).unwrap();
       if input.len() > 0 {
         let mut lwr = lwr % input.len();
-        let mut upr = upr % input.len();
+        let mut upr = upr % (input.len() + 1);
         if lwr > upr { std::mem::swap(&mut lwr, &mut upr); }
         if input[lwr..upr] != *bin.access(lwr..upr) {
           return false
@@ -235,7 +235,7 @@ macro_rules! range_from {
       let mut bin = $mayda_ty::new();
       bin.encode(&input).unwrap();
       for a in 0..input.len() {
-        if input[..a] != *bin.access(..a) {
+        if input[a..] != *bin.access(a..) {
           return false
         }
       }
@@ -289,13 +289,15 @@ macro_rules! range_to {
     fn $name(input: Vec<$int_ty>) -> bool {
       let mut bin = $mayda_ty::new();
       bin.encode(&input).unwrap();
-      for a in 0..input.len() {
-        if input[a..] != *bin.access(a..) {
+      for a in 0..(input.len() + 1) {
+        if input[..a] != *bin.access(..a) {
           return false
         }
       }
       true
-    })*) }
+    }
+  )*)
+}
 
 range_to!{
   (Monotone: u8, rt_mon_u8)

@@ -134,9 +134,8 @@ impl<B: Bits> Uniform<B> {
   /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
   /// let bits = Uniform::from_slice(&input).unwrap();
   ///
-  /// let mut output: Vec<u32> = vec![0; 8];
-  /// let length: usize = bits.decode_into(&mut *output);
-  /// assert_eq!(*input, output[..length]);
+  /// let output = bits.decode();
+  /// assert_eq!(input, output);
   /// ```
   #[inline]
   pub fn from_slice(slice: &[B]) -> Result<Self, super::Error> {
@@ -1305,24 +1304,28 @@ macro_rules! access_unsigned {
           if range.end > 0 {
             panic!(format!("range end is {} but length is 0", range.end))
           }
+          return Vec::new();
         }
 
-        let n_blks: usize = (storage[0] >> 2) as usize;
+        let mut s_ptr: *const u32 = storage.as_ptr();
+        let n_blks: usize = (*s_ptr >> 2) as usize;
         let s_blk: usize = range.start >> 7;
         if s_blk > n_blks {
           let len_bnd: usize = (n_blks + 1) << 7;
           panic!(format!("range start is {} but length < {}", range.start, len_bnd))
         }
-        let e_blk: usize = range.end >> 7;
+        let e_blk: usize = range.end.saturating_sub(1) >> 7;
         if e_blk > n_blks {
           let len_bnd: usize = (n_blks + 1) << 7;
           panic!(format!("range end is {} but length < {}", range.end, len_bnd))
         }
+        let lwr: usize = range.start - (s_blk << 7);
+        let upr: usize = range.end - (e_blk << 7);
+        let o_length: usize = range.end - range.start;
 
         // Find the block containing the range start
         let ty_wd: u32 = $ty::width();
         let ty_wrd: usize = utility::words_for_bits(ty_wd);
-        let mut s_ptr: *const u32 = storage.as_ptr();
         let wrd_to_blk: usize = words_to_block(n_blks, s_blk, ty_wd, s_ptr);
 
         // Prepare return variable
@@ -1330,60 +1333,105 @@ macro_rules! access_unsigned {
         let mut o_ptr: *mut $ty = output.as_mut_ptr();
 
         // Start block known, decode the range
-        s_ptr = storage.as_ptr().offset(wrd_to_blk as isize);
+        s_ptr = s_ptr.offset(wrd_to_blk as isize);
 
-        // Block size is known for all but the final block
-        for _ in 0..(e_blk - s_blk) {
+        if s_blk == e_blk {
           // Find the width of the block
+          let e_wd: u32 = *s_ptr & E_WIDTH;
+          let left: usize = ((*s_ptr & E_COUNT) >> 7) as usize;
+          s_ptr = s_ptr.offset(1);
+
+          // Checks a lower bound on the length
+          let len_bnd: usize = (e_blk << 7) + left;
+          if range.start > len_bnd {
+            panic!(format!("range start is {} but length is {}", range.start, len_bnd))
+          }
+          if range.end > len_bnd {
+            panic!(format!("range end is {} but length is {}", range.end, len_bnd))
+          }
+          if range.start == range.end {
+            return Vec::new();
+          }
+
+          // Decode the block
+          s_ptr = Uniform::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
+
+          let shift: $ty = *(s_ptr as *const $ty);
+          for a in (lwr as isize)..(upr as isize) {
+            *o_ptr.offset(a) = (*o_ptr.offset(a)).wrapping_add(shift);
+          }
+
+          ptr::copy(o_ptr.offset(lwr as isize), o_ptr, o_length);
+          output.set_len(o_length);
+
+          output
+        } else {
+          // Initial block
           let e_wd: u32 = *s_ptr & E_WIDTH;
           s_ptr = s_ptr.offset(1);
 
-          // Decode the block
+          // Decode initial block
           mayda_codec::$dec_simd[e_wd as usize](s_ptr, o_ptr);
           s_ptr = s_ptr.offset(4 * e_wd as isize);
 
           let shift: $ty = *(s_ptr as *const $ty);
           s_ptr = s_ptr.offset(ty_wrd as isize);
-          for a in 0..128 {
+          for a in (lwr as isize)..128 {
             *o_ptr.offset(a) = (*o_ptr.offset(a)).wrapping_add(shift);
           }
 
-          o_ptr = o_ptr.offset(128);
+          let count: usize = 128 - lwr;
+          ptr::copy(o_ptr.offset(lwr as isize), o_ptr, count);
+          o_ptr = o_ptr.offset(count as isize);
+
+          // Block size is known for all but the final block
+          for _ in 0..(e_blk - s_blk - 1) {
+            // Find the width of the block
+            let e_wd: u32 = *s_ptr & E_WIDTH;
+            s_ptr = s_ptr.offset(1);
+
+            // Decode the block
+            mayda_codec::$dec_simd[e_wd as usize](s_ptr, o_ptr);
+            s_ptr = s_ptr.offset(4 * e_wd as isize);
+
+            let shift: $ty = *(s_ptr as *const $ty);
+            s_ptr = s_ptr.offset(ty_wrd as isize);
+            for a in 0..128 {
+              *o_ptr.offset(a) = (*o_ptr.offset(a)).wrapping_add(shift);
+            }
+
+            o_ptr = o_ptr.offset(128);
+          }
+
+          // Final block
+          let e_wd: u32 = *s_ptr & E_WIDTH;
+          let left: usize = ((*s_ptr & E_COUNT) >> 7) as usize;
+          s_ptr = s_ptr.offset(1);
+
+          // Checks a lower bound on the length
+          let len_bnd: usize = (e_blk << 7) + left;
+          if range.start > len_bnd {
+            panic!(format!("range start is {} but length is {}", range.start, len_bnd))
+          }
+          if range.end > len_bnd {
+            panic!(format!("range end is {} but length is {}", range.end, len_bnd))
+          }
+          if range.start == range.end {
+            return Vec::new();
+          }
+
+          // Decode final block
+          s_ptr = Uniform::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
+
+          let shift: $ty = *(s_ptr as *const $ty);
+          for a in 0..(upr as isize) {
+            *o_ptr.offset(a) = (*o_ptr.offset(a)).wrapping_add(shift);
+          }
+
+          output.set_len(o_length);
+
+          output
         }
-
-        // Final block
-        let e_wd: u32 = *s_ptr & E_WIDTH;
-        let left: usize = ((*s_ptr & E_COUNT) >> 7) as usize;
-        s_ptr = s_ptr.offset(1);
-
-        // Checks a lower bound on the length
-        let len_bnd: usize = (e_blk << 7) + left;
-        if range.start > len_bnd {
-          panic!(format!("range start is {} but length is {}", range.start, len_bnd))
-        }
-        if range.end > len_bnd {
-          panic!(format!("range end is {} but length is {}", range.end, len_bnd))
-        }
-        if range.start == range.end {
-          return Vec::new();
-        }
-
-        // Decode final block
-        s_ptr = Uniform::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
-
-        let shift: $ty = *(s_ptr as *const $ty);
-        for a in 0..(left as isize) {
-          *o_ptr.offset(a) = (*o_ptr.offset(a)).wrapping_add(shift);
-        }
-
-        // Shift the entries into the desired range
-        let sft: usize = range.start - (s_blk << 7);
-        let src: *const $ty = output.as_ptr().offset(sft as isize);
-        let snk: *mut $ty = output.as_mut_ptr();
-        ptr::copy(src, snk, range.end - range.start);
-        output.set_len(range.end - range.start);
-
-        output
       }
     }
 
@@ -1393,19 +1441,21 @@ macro_rules! access_unsigned {
           if range.start > 0 {
             panic!(format!("range start is {} but length is 0", range.start))
           }
+          return Vec::new();
         }
 
-        let n_blks: usize = (storage[0] >> 2) as usize;
+        let mut s_ptr: *const u32 = storage.as_ptr();
+        let n_blks: usize = (*s_ptr >> 2) as usize;
         let s_blk: usize = range.start >> 7;
         if s_blk > n_blks {
           let len_bnd: usize = (n_blks + 1) << 7;
           panic!(format!("range start is {} but length < {}", range.start, len_bnd))
         }
+        let lwr: usize = range.start - (s_blk << 7);
 
         // Find the block containing the range start
         let ty_wd: u32 = $ty::width();
         let ty_wrd: usize = utility::words_for_bits(ty_wd);
-        let mut s_ptr: *const u32 = storage.as_ptr();
         let wrd_to_blk: usize = words_to_block(n_blks, s_blk, ty_wd, s_ptr);
 
         // Prepare return variable
@@ -1413,57 +1463,101 @@ macro_rules! access_unsigned {
         let mut o_ptr: *mut $ty = output.as_mut_ptr();
 
         // Start block known, decode the range
-        s_ptr = storage.as_ptr().offset(wrd_to_blk as isize);
+        s_ptr = s_ptr.offset(wrd_to_blk as isize);
 
-        // Block size is known for all but the final block
-        for _ in 0..(n_blks - s_blk) {
+        if s_blk == n_blks {
           // Find the width of the block
+          let e_wd: u32 = *s_ptr & E_WIDTH;
+          let left: usize = ((*s_ptr & E_COUNT) >> 7) as usize;
+          s_ptr = s_ptr.offset(1);
+
+          // Checks the length of storage
+          let s_length: usize = (n_blks << 7) + left;
+          if range.start > s_length {
+            panic!(format!("range start is {} but length is {}", range.start, s_length))
+          }
+          if range.start == s_length {
+            return Vec::new();
+          }
+
+          // Decode the block
+          s_ptr = Uniform::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
+
+          let shift: $ty = *(s_ptr as *const $ty);
+          for a in (lwr as isize)..(left as isize) {
+            *o_ptr.offset(a) = (*o_ptr.offset(a)).wrapping_add(shift);
+          }
+
+          let o_length: usize = s_length - range.start;
+          ptr::copy(o_ptr.offset(lwr as isize), o_ptr, o_length);
+          output.set_len(o_length);
+
+          output
+        } else {
+          // Initial block
           let e_wd: u32 = *s_ptr & E_WIDTH;
           s_ptr = s_ptr.offset(1);
 
-          // Decode the block
+          // Decode initial block
           mayda_codec::$dec_simd[e_wd as usize](s_ptr, o_ptr);
           s_ptr = s_ptr.offset(4 * e_wd as isize);
 
           let shift: $ty = *(s_ptr as *const $ty);
           s_ptr = s_ptr.offset(ty_wrd as isize);
-          for a in 0..128 {
+          for a in (lwr as isize)..128 {
             *o_ptr.offset(a) = (*o_ptr.offset(a)).wrapping_add(shift);
           }
 
-          o_ptr = o_ptr.offset(128);
+          let count: usize = 128 - lwr;
+          ptr::copy(o_ptr.offset(lwr as isize), o_ptr, count);
+          o_ptr = o_ptr.offset(count as isize);
+
+          // Block size is known for all but the final block
+          for _ in 0..(n_blks - s_blk - 1) {
+            // Find the width of the block
+            let e_wd: u32 = *s_ptr & E_WIDTH;
+            s_ptr = s_ptr.offset(1);
+
+            // Decode the block
+            mayda_codec::$dec_simd[e_wd as usize](s_ptr, o_ptr);
+            s_ptr = s_ptr.offset(4 * e_wd as isize);
+
+            let shift: $ty = *(s_ptr as *const $ty);
+            s_ptr = s_ptr.offset(ty_wrd as isize);
+            for a in 0..128 {
+              *o_ptr.offset(a) = (*o_ptr.offset(a)).wrapping_add(shift);
+            }
+
+            o_ptr = o_ptr.offset(128);
+          }
+
+          // Final block
+          let e_wd: u32 = *s_ptr & E_WIDTH;
+          let left: usize = ((*s_ptr & E_COUNT) >> 7) as usize;
+          s_ptr = s_ptr.offset(1);
+
+          // Checks the length of storage
+          let s_length: usize = (n_blks << 7) + left;
+          if range.start > s_length {
+            panic!(format!("range start is {} but length is {}", range.start, s_length))
+          }
+          if range.start == s_length {
+            return Vec::new();
+          }
+
+          // Decode final block
+          s_ptr = Uniform::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
+
+          let shift: $ty = *(s_ptr as *const $ty);
+          for a in 0..(left as isize) {
+            *o_ptr.offset(a) = (*o_ptr.offset(a)).wrapping_add(shift);
+          }
+
+          let o_length: usize = s_length - range.start;
+          output.set_len(o_length);
+
+          output
         }
-
-        // Final block
-        let e_wd: u32 = *s_ptr & E_WIDTH;
-        let left: usize = ((*s_ptr & E_COUNT) >> 7) as usize;
-        s_ptr = s_ptr.offset(1);
-
-        // Check a lower bound on the length
-        let len: usize = (n_blks << 7) + left;
-        if range.start > len {
-          panic!(format!("range start is {} but length is {}", range.start, len))
-        }
-        if range.start == len {
-          return Vec::new();
-        }
-
-        // Decode final block
-        s_ptr = Uniform::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
-
-        let shift: $ty = *(s_ptr as *const $ty);
-        for a in 0..(left as isize) {
-          *o_ptr.offset(a) = (*o_ptr.offset(a)).wrapping_add(shift);
-        }
-
-        // Shift the entries into the desired range
-        let sft: usize = range.start - (s_blk << 7);
-        let src: *const $ty = output.as_ptr().offset(sft as isize);
-        let snk: *mut $ty = output.as_mut_ptr();
-        ptr::copy(src, snk, len - range.start);
-        output.set_len(len - range.start);
-
-        output
       }
     }
   )*)

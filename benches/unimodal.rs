@@ -142,3 +142,30 @@ indexing_bench!{
   (u32: 1024, 32, 32768, 32767, idx_u32_1024_32_32768_32767)
   (u64: 1024, 32, 32768, 32767, idx_u64_1024_32_32768_32767)
 }
+
+macro_rules! range_bench {
+  ($(($t: ty: $mean: expr, $std_dev: expr, $length: expr, $lwr: expr, $upr: expr, $name: ident))*) => ($(
+    #[bench]
+    fn $name(b: &mut Bencher) {
+      let mut bin = Unimodal::new();
+      let input: Vec<$t> = rand_outliers($mean, $std_dev, $length);
+      bin.encode(&input).unwrap();
+      let mut vec = Vec::new();
+      b.iter(|| {
+        vec = bin.access($lwr..$upr);
+      });
+      assert_eq!(&input[$lwr..$upr], &vec[..]);
+    }
+  )*)
+}
+
+range_bench!{
+  (u8: 128, 16, 1024, 892, 900, r_u8_0_MAX_1024_892_900)
+  (u16: 1024, 32, 1024, 892, 900, r_u16_0_MAX_1024_892_900)
+  (u32: 1024, 32, 1024, 892, 900, r_u32_0_MAX_1024_892_900)
+  (u64: 1024, 32, 1024, 892, 900, r_u64_0_MAX_1024_892_900)
+  (u8: 128, 16, 1024, 892, 900, r_i8_MIN_MAX_1024_892_900)
+  (u16: 1024, 32, 1024, 892, 900, r_i16_MIN_MAX_1024_892_900)
+  (u32: 1024, 32, 1024, 892, 900, r_i32_MIN_MAX_1024_892_900)
+  (u64: 1024, 32, 1024, 892, 900, r_i64_MIN_MAX_1024_892_900)
+}

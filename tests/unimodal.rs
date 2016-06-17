@@ -416,7 +416,7 @@ macro_rules! range {
       println!("{:?}", input);
       bin.encode(&input).unwrap();
       for a in bin.storage() { println!("{:032b}", a); }
-      for a in 0..($length - $width) {
+      for a in 0..($length - $width + 1) {
         let vec = bin.access(a..($width + a));
         println!("{:?} {:?}", &input[a..($width + a)], &vec[..]);
         assert_eq!(&input[a..($width + a)], &vec[..]);
@@ -512,37 +512,6 @@ range_panic!{
   (i64: 2, 128..129, r_pan_i64_2_128_129)
 }
 
-macro_rules! range_to {
-  ($(($t: ty: $mean: expr, $std_dev: expr, $length: expr, $name: ident))*) => ($(
-    #[test]
-    fn $name() {
-      let mut bin = Unimodal::new();
-      let input: Vec<$t> = rand_outliers($mean, $std_dev, $length);
-      println!("{:?}", input);
-      bin.encode(&input).unwrap();
-      for a in bin.storage() { println!("{:032b}", a); }
-      for a in 0..$length {
-        let vec = bin.access(..a);
-        println!("{:?} {:?}", &input[..a], &vec[..]);
-        assert_eq!(input[..a], vec[..]);
-      }
-    }
-  )*)
-}
-
-range_to!{
-  (u8: 128, 16, 1024, rt_u8_128_16_1024)
-  (u16: 1024, 32, 1024, rt_u16_1024_32_1024)
-  (u32: 1024, 32, 1024, rt_u32_1024_32_1024)
-  (u64: 1024, 32, 1024, rt_u64_1024_32_1024)
-  (usize: 1024, 32, 1024, rt_usize_1024_32_1024)
-  (i8: 0, 16, 1024, rt_i8_0_16_1024)
-  (i16: 0, 32, 1024, rt_i16_0_32_1024)
-  (i32: 0, 32, 1024, rt_i32_0_32_1024)
-  (i64: 0, 32, 1024, rt_i64_0_32_1024)
-  (isize: 0, 32, 1024, rt_isize_0_32_1024)
-}
-
 macro_rules! range_from {
   ($(($t: ty: $mean: expr, $std_dev: expr, $length: expr, $name: ident))*) => ($(
     #[test]
@@ -572,6 +541,37 @@ range_from!{
   (i32: 0, 32, 1024, rf_i32_0_32_1024)
   (i64: 0, 32, 1024, rf_i64_0_32_1024)
   (isize: 0, 32, 1024, rf_isize_0_32_1024)
+}
+
+macro_rules! range_to {
+  ($(($t: ty: $mean: expr, $std_dev: expr, $length: expr, $name: ident))*) => ($(
+    #[test]
+    fn $name() {
+      let mut bin = Unimodal::new();
+      let input: Vec<$t> = rand_outliers($mean, $std_dev, $length);
+      println!("{:?}", input);
+      bin.encode(&input).unwrap();
+      for a in bin.storage() { println!("{:032b}", a); }
+      for a in 0..($length + 1) {
+        let vec = bin.access(..a);
+        println!("{:?} {:?}", &input[..a], &vec[..]);
+        assert_eq!(input[..a], vec[..]);
+      }
+    }
+  )*)
+}
+
+range_to!{
+  (u8: 128, 16, 1024, rt_u8_128_16_1024)
+  (u16: 1024, 32, 1024, rt_u16_1024_32_1024)
+  (u32: 1024, 32, 1024, rt_u32_1024_32_1024)
+  (u64: 1024, 32, 1024, rt_u64_1024_32_1024)
+  (usize: 1024, 32, 1024, rt_usize_1024_32_1024)
+  (i8: 0, 16, 1024, rt_i8_0_16_1024)
+  (i16: 0, 32, 1024, rt_i16_0_32_1024)
+  (i32: 0, 32, 1024, rt_i32_0_32_1024)
+  (i64: 0, 32, 1024, rt_i64_0_32_1024)
+  (isize: 0, 32, 1024, rt_isize_0_32_1024)
 }
 
 macro_rules! range_full {
@@ -612,7 +612,7 @@ macro_rules! range_inclusive {
       println!("{:?}", input);
       bin.encode(&input).unwrap();
       for a in bin.storage() { println!("{:032b}", a); }
-      for a in 0..($length - $width - 1) {
+      for a in 0..($length - $width) {
         let vec = bin.access(a...($width + a));
         println!("{:?} {:?}", &input[a...($width + a)], &vec[..]);
         assert_eq!(&input[a...($width + a)], &vec[..]);

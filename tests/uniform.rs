@@ -14,6 +14,7 @@ extern crate rand;
 
 use mayda::{Access, Encode, Uniform};
 use rand::distributions::{IndependentSample, Range};
+use std::{u8, u16, u32, u64, usize, i8, i16, i32, i64, isize};
 
 fn rand_uniform<T>(min: T, max: T, length: usize) -> Vec<T>
   where T: PartialOrd + rand::distributions::range::SampleRange {
@@ -64,7 +65,7 @@ random_values!{
   (u8: 0, 128, 511, rv_u8_0_128_511)
   (u8: 0, 128, 512, rv_u8_0_128_512)
   (u8: 0, 128, 513, rv_u8_0_128_513)
-  (u8: 0, std::u8::MAX, 1024, rv_u8_0_MAX_1024)
+  (u8: 0, u8::MAX, 1024, rv_u8_0_MAX_1024)
   (i8: -8, 8, 0, rv_i8_8_8_0)
   (i8: -8, 8, 1, rv_i8_8_8_1)
   (i8: -8, 8, 2, rv_i8_8_8_2)
@@ -86,7 +87,7 @@ random_values!{
   (i8: -64, 64, 511, rv_i8_64_64_511)
   (i8: -64, 64, 512, rv_i8_64_64_512)
   (i8: -64, 64, 513, rv_i8_64_64_513)
-  (i8: std::i8::MIN, std::i8::MAX, 1024, rv_i8_MIN_MAX_1024)
+  (i8: i8::MIN, i8::MAX, 1024, rv_i8_MIN_MAX_1024)
 }
 
 random_values!{
@@ -111,7 +112,7 @@ random_values!{
   (u16: 0, 128, 511, rv_u16_0_128_511)
   (u16: 0, 128, 512, rv_u16_0_128_512)
   (u16: 0, 128, 513, rv_u16_0_128_513)
-  (u16: 0, std::u16::MAX, 1024, rv_u16_0_MAX_1024)
+  (u16: 0, u16::MAX, 1024, rv_u16_0_MAX_1024)
   (i16: -8, 8, 0, rv_i16_8_8_0)
   (i16: -8, 8, 1, rv_i16_8_8_1)
   (i16: -8, 8, 2, rv_i16_8_8_2)
@@ -133,7 +134,7 @@ random_values!{
   (i16: -64, 64, 511, rv_i16_64_64_511)
   (i16: -64, 64, 512, rv_i16_64_64_512)
   (i16: -64, 64, 513, rv_i16_64_64_513)
-  (i16: std::i16::MIN, std::i16::MAX, 1024, rv_i16_MIN_MAX_1024)
+  (i16: i16::MIN, i16::MAX, 1024, rv_i16_MIN_MAX_1024)
 }
 
 random_values!{
@@ -158,7 +159,7 @@ random_values!{
   (u32: 0, 128, 511, rv_u32_0_128_511)
   (u32: 0, 128, 512, rv_u32_0_128_512)
   (u32: 0, 128, 513, rv_u32_0_128_513)
-  (u32: 0, std::u32::MAX, 1024, rv_u32_0_MAX_1024)
+  (u32: 0, u32::MAX, 1024, rv_u32_0_MAX_1024)
   (i32: -8, 8, 0, rv_i32_8_8_0)
   (i32: -8, 8, 1, rv_i32_8_8_1)
   (i32: -8, 8, 2, rv_i32_8_8_2)
@@ -180,7 +181,7 @@ random_values!{
   (i32: -64, 64, 511, rv_i32_64_64_511)
   (i32: -64, 64, 512, rv_i32_64_64_512)
   (i32: -64, 64, 513, rv_i32_64_64_513)
-  (i32: std::i32::MIN, std::i32::MAX, 1024, rv_i32_MIN_MAX_1024)
+  (i32: i32::MIN, i32::MAX, 1024, rv_i32_MIN_MAX_1024)
 }
 
 random_values!{
@@ -205,7 +206,7 @@ random_values!{
   (u64: 0, 128, 511, rv_u64_0_128_511)
   (u64: 0, 128, 512, rv_u64_0_128_512)
   (u64: 0, 128, 513, rv_u64_0_128_513)
-  (u64: 0, std::u64::MAX, 1024, rv_u64_0_MAX_1024)
+  (u64: 0, u64::MAX, 1024, rv_u64_0_MAX_1024)
   (i64: -8, 8, 0, rv_i64_8_8_0)
   (i64: -8, 8, 1, rv_i64_8_8_1)
   (i64: -8, 8, 2, rv_i64_8_8_2)
@@ -227,13 +228,13 @@ random_values!{
   (i64: -64, 64, 511, rv_i64_64_64_511)
   (i64: -64, 64, 512, rv_i64_64_64_512)
   (i64: -64, 64, 513, rv_i64_64_64_513)
-  (i64: std::i64::MIN, std::i64::MAX, 1024, rv_i64_MIN_MAX_1024)
+  (i64: i64::MIN, i64::MAX, 1024, rv_i64_MIN_MAX_1024)
 }
 
 // Verify that methods provided by u64 or u32
 random_values!{
-  (usize: 0, std::usize::MAX, 1024, cv_usize_0_MAX_1024)
-  (isize: std::isize::MIN, std::isize::MAX, 1024, cv_isize_MIN_MAX_1024)
+  (usize: 0, usize::MAX, 1024, cv_usize_0_MAX_1024)
+  (isize: isize::MIN, isize::MAX, 1024, cv_isize_MIN_MAX_1024)
 }
 
 macro_rules! decode_into {
@@ -340,16 +341,16 @@ macro_rules! indexing {
 }
 
 indexing!{
-  (u8: 0, std::u8::MAX, 1024, idx_u8_0_MAX_1024)
-  (u16: 0, std::u16::MAX, 1024, idx_u16_0_MAX_1024)
-  (u32: 0, std::u32::MAX, 1024, idx_u32_0_MAX_1024)
-  (u64: 0, std::u64::MAX, 1024, idx_u64_0_MAX_1024)
-  (usize: 0, std::usize::MAX, 1024, idx_usize_0_MAX_1024)
-  (i8: std::i8::MIN, std::i8::MAX, 1024, idx_i8_MIN_MAX_1024)
-  (i16: std::i16::MIN, std::i16::MAX, 1024, idx_i16_MIN_MAX_1024)
-  (i32: std::i32::MIN, std::i32::MAX, 1024, idx_i32_MIN_MAX_1024)
-  (i64: std::i64::MIN, std::i64::MAX, 1024, idx_i64_MIN_MAX_1024)
-  (isize: std::isize::MIN, std::isize::MAX, 1024, idx_isize_MIN_MAX_1024)
+  (u8: 0, u8::MAX, 1024, idx_u8_0_MAX_1024)
+  (u16: 0, u16::MAX, 1024, idx_u16_0_MAX_1024)
+  (u32: 0, u32::MAX, 1024, idx_u32_0_MAX_1024)
+  (u64: 0, u64::MAX, 1024, idx_u64_0_MAX_1024)
+  (usize: 0, usize::MAX, 1024, idx_usize_0_MAX_1024)
+  (i8: i8::MIN, i8::MAX, 1024, idx_i8_MIN_MAX_1024)
+  (i16: i16::MIN, i16::MAX, 1024, idx_i16_MIN_MAX_1024)
+  (i32: i32::MIN, i32::MAX, 1024, idx_i32_MIN_MAX_1024)
+  (i64: i64::MIN, i64::MAX, 1024, idx_i64_MIN_MAX_1024)
+  (isize: isize::MIN, isize::MAX, 1024, idx_isize_MIN_MAX_1024)
 }
 
 macro_rules! indexing_panic {
@@ -403,7 +404,7 @@ macro_rules! range {
       println!("{:?}", input);
       bin.encode(&input).unwrap();
       for a in bin.storage() { println!("{:032b}", a); }
-      for a in 0..($length - $width) {
+      for a in 0..($length - $width + 1) {
         let vec = bin.access(a..($width + a));
         println!("{:?} {:?}", &input[a..($width + a)], &vec[..]);
         assert_eq!(&input[a..($width + a)], &vec[..]);
@@ -413,16 +414,16 @@ macro_rules! range {
 }
 
 range!{
-  (u8: 0, std::u8::MAX, 1024, 15, r_u8_0_MAX_1024_15)
-  (u16: 0, std::u16::MAX, 1024, 15, r_u16_0_MAX_1024_15)
-  (u32: 0, std::u32::MAX, 1024, 15, r_u32_0_MAX_1024_15)
-  (u64: 0, std::u64::MAX, 1024, 15, r_u64_0_MAX_1024_15)
-  (usize: 0, std::usize::MAX, 1024, 15, r_usize_0_MAX_1024_15)
-  (i8: std::i8::MIN, std::i8::MAX, 1024, 15, r_i8_MIN_MAX_1024_15)
-  (i16: std::i16::MIN, std::i16::MAX, 1024, 15, r_i16_MIN_MAX_1024_15)
-  (i32: std::i32::MIN, std::i32::MAX, 1024, 15, r_i32_MIN_MAX_1024_15)
-  (i64: std::i64::MIN, std::i64::MAX, 1024, 15, r_i64_MIN_MAX_1024_15)
-  (isize: std::isize::MIN, std::isize::MAX, 1024, 15, r_isize_MIN_MAX_1024_15)
+  (u8: 0, u8::MAX, 1024, 15, r_u8_0_MAX_1024_15)
+  (u16: 0, u16::MAX, 1024, 15, r_u16_0_MAX_1024_15)
+  (u32: 0, u32::MAX, 1024, 15, r_u32_0_MAX_1024_15)
+  (u64: 0, u64::MAX, 1024, 15, r_u64_0_MAX_1024_15)
+  (usize: 0, usize::MAX, 1024, 15, r_usize_0_MAX_1024_15)
+  (i8: i8::MIN, i8::MAX, 1024, 15, r_i8_MIN_MAX_1024_15)
+  (i16: i16::MIN, i16::MAX, 1024, 15, r_i16_MIN_MAX_1024_15)
+  (i32: i32::MIN, i32::MAX, 1024, 15, r_i32_MIN_MAX_1024_15)
+  (i64: i64::MIN, i64::MAX, 1024, 15, r_i64_MIN_MAX_1024_15)
+  (isize: isize::MIN, isize::MAX, 1024, 15, r_isize_MIN_MAX_1024_15)
 }
 
 macro_rules! range_panic {
@@ -499,37 +500,6 @@ range_panic!{
   (i64: 2, 128..129, r_pan_i64_2_128_129)
 }
 
-macro_rules! range_to {
-  ($(($t: ty: $min: expr, $max: expr, $length: expr, $name: ident))*) => ($(
-    #[test]
-    fn $name() {
-      let mut bin = Uniform::new();
-      let input: Vec<$t> = rand_uniform($min, $max, $length);
-      println!("{:?}", input);
-      bin.encode(&input).unwrap();
-      for a in bin.storage() { println!("{:032b}", a); }
-      for a in 0..$length {
-        let vec = bin.access(..a);
-        println!("{:?} {:?}", &input[..a], &vec[..]);
-        assert_eq!(input[..a], vec[..]);
-      }
-    }
-  )*)
-}
-
-range_to!{
-  (u8: 0, std::u8::MAX, 1024, rt_u8_0_MAX_1024)
-  (u16: 0, std::u16::MAX, 1024, rt_u16_0_MAX_1024)
-  (u32: 0, std::u32::MAX, 1024, rt_u32_0_MAX_1024)
-  (u64: 0, std::u64::MAX, 1024, rt_u64_0_MAX_1024)
-  (usize: 0, std::usize::MAX, 1024, rt_usize_0_MAX_1024)
-  (i8: std::i8::MIN, std::i8::MAX, 1024, rt_i8_MIN_MAX_1024)
-  (i16: std::i16::MIN, std::i16::MAX, 1024, rt_i16_MIN_MAX_1024)
-  (i32: std::i32::MIN, std::i32::MAX, 1024, rt_i32_MIN_MAX_1024)
-  (i64: std::i64::MIN, std::i64::MAX, 1024, rt_i64_MIN_MAX_1024)
-  (isize: std::isize::MIN, std::isize::MAX, 1024, rt_isize_MIN_MAX_1024)
-}
-
 macro_rules! range_from {
   ($(($t: ty: $min: expr, $max: expr, $length: expr, $name: ident))*) => ($(
     #[test]
@@ -549,16 +519,47 @@ macro_rules! range_from {
 }
 
 range_from!{
-  (u8: 0, std::u8::MAX, 1024, rf_u8_0_MAX_1024)
-  (u16: 0, std::u16::MAX, 1024, rf_u16_0_MAX_1024)
-  (u32: 0, std::u32::MAX, 1024, rf_u32_0_MAX_1024)
-  (u64: 0, std::u64::MAX, 1024, rf_u64_0_MAX_1024)
-  (usize: 0, std::usize::MAX, 1024, rf_usize_0_MAX_1024)
-  (i8: std::i8::MIN, std::i8::MAX, 1024, rf_i8_MIN_MAX_1024)
-  (i16: std::i16::MIN, std::i16::MAX, 1024, rf_i16_MIN_MAX_1024)
-  (i32: std::i32::MIN, std::i32::MAX, 1024, rf_i32_MIN_MAX_1024)
-  (i64: std::i64::MIN, std::i64::MAX, 1024, rf_i64_MIN_MAX_1024)
-  (isize: std::isize::MIN, std::isize::MAX, 1024, rf_isize_MIN_MAX_1024)
+  (u8: 0, u8::MAX, 1024, rf_u8_0_MAX_1024)
+  (u16: 0, u16::MAX, 1024, rf_u16_0_MAX_1024)
+  (u32: 0, u32::MAX, 1024, rf_u32_0_MAX_1024)
+  (u64: 0, u64::MAX, 1024, rf_u64_0_MAX_1024)
+  (usize: 0, usize::MAX, 1024, rf_usize_0_MAX_1024)
+  (i8: i8::MIN, i8::MAX, 1024, rf_i8_MIN_MAX_1024)
+  (i16: i16::MIN, i16::MAX, 1024, rf_i16_MIN_MAX_1024)
+  (i32: i32::MIN, i32::MAX, 1024, rf_i32_MIN_MAX_1024)
+  (i64: i64::MIN, i64::MAX, 1024, rf_i64_MIN_MAX_1024)
+  (isize: isize::MIN, isize::MAX, 1024, rf_isize_MIN_MAX_1024)
+}
+
+macro_rules! range_to {
+  ($(($t: ty: $min: expr, $max: expr, $length: expr, $name: ident))*) => ($(
+    #[test]
+    fn $name() {
+      let mut bin = Uniform::new();
+      let input: Vec<$t> = rand_uniform($min, $max, $length);
+      println!("{:?}", input);
+      bin.encode(&input).unwrap();
+      for a in bin.storage() { println!("{:032b}", a); }
+      for a in 0..($length + 1) {
+        let vec = bin.access(..a);
+        println!("{:?} {:?}", &input[..a], &vec[..]);
+        assert_eq!(input[..a], vec[..]);
+      }
+    }
+  )*)
+}
+
+range_to!{
+  (u8: 0, u8::MAX, 1024, rt_u8_0_MAX_1024)
+  (u16: 0, u16::MAX, 1024, rt_u16_0_MAX_1024)
+  (u32: 0, u32::MAX, 1024, rt_u32_0_MAX_1024)
+  (u64: 0, u64::MAX, 1024, rt_u64_0_MAX_1024)
+  (usize: 0, usize::MAX, 1024, rt_usize_0_MAX_1024)
+  (i8: i8::MIN, i8::MAX, 1024, rt_i8_MIN_MAX_1024)
+  (i16: i16::MIN, i16::MAX, 1024, rt_i16_MIN_MAX_1024)
+  (i32: i32::MIN, i32::MAX, 1024, rt_i32_MIN_MAX_1024)
+  (i64: i64::MIN, i64::MAX, 1024, rt_i64_MIN_MAX_1024)
+  (isize: isize::MIN, isize::MAX, 1024, rt_isize_MIN_MAX_1024)
 }
 
 macro_rules! range_full {
@@ -578,16 +579,16 @@ macro_rules! range_full {
 }
 
 range_full!{
-  (u8: 0, std::u8::MAX, 1024, ru_u8_0_MAX_1024)
-  (u16: 0, std::u16::MAX, 1024, ru_u16_0_MAX_1024)
-  (u32: 0, std::u32::MAX, 1024, ru_u32_0_MAX_1024)
-  (u64: 0, std::u64::MAX, 1024, ru_u64_0_MAX_1024)
-  (usize: 0, std::usize::MAX, 1024, ru_usize_0_MAX_1024)
-  (i8: std::i8::MIN, std::i8::MAX, 1024, ru_i8_MIN_MAX_1024)
-  (i16: std::i16::MIN, std::i16::MAX, 1024, ru_i16_MIN_MAX_1024)
-  (i32: std::i32::MIN, std::i32::MAX, 1024, ru_i32_MIN_MAX_1024)
-  (i64: std::i64::MIN, std::i64::MAX, 1024, ru_i64_MIN_MAX_1024)
-  (isize: std::isize::MIN, std::isize::MAX, 1024, ru_isize_MIN_MAX_1024)
+  (u8: 0, u8::MAX, 1024, ru_u8_0_MAX_1024)
+  (u16: 0, u16::MAX, 1024, ru_u16_0_MAX_1024)
+  (u32: 0, u32::MAX, 1024, ru_u32_0_MAX_1024)
+  (u64: 0, u64::MAX, 1024, ru_u64_0_MAX_1024)
+  (usize: 0, usize::MAX, 1024, ru_usize_0_MAX_1024)
+  (i8: i8::MIN, i8::MAX, 1024, ru_i8_MIN_MAX_1024)
+  (i16: i16::MIN, i16::MAX, 1024, ru_i16_MIN_MAX_1024)
+  (i32: i32::MIN, i32::MAX, 1024, ru_i32_MIN_MAX_1024)
+  (i64: i64::MIN, i64::MAX, 1024, ru_i64_MIN_MAX_1024)
+  (isize: isize::MIN, isize::MAX, 1024, ru_isize_MIN_MAX_1024)
 }
 
 macro_rules! range_inclusive {
@@ -599,7 +600,7 @@ macro_rules! range_inclusive {
       println!("{:?}", input);
       bin.encode(&input).unwrap();
       for a in bin.storage() { println!("{:032b}", a); }
-      for a in 0..($length - $width - 1) {
+      for a in 0..($length - $width) {
         let vec = bin.access(a...($width + a));
         println!("{:?} {:?}", &input[a...($width + a)], &vec[..]);
         assert_eq!(&input[a...($width + a)], &vec[..]);
@@ -609,14 +610,14 @@ macro_rules! range_inclusive {
 }
 
 range_inclusive!{
-  (u8: 0, std::u8::MAX, 1024, 15, ri_u8_0_MAX_1024_15)
-  (u16: 0, std::u16::MAX, 1024, 15, ri_u16_0_MAX_1024_15)
-  (u32: 0, std::u32::MAX, 1024, 15, ri_u32_0_MAX_1024_15)
-  (u64: 0, std::u64::MAX, 1024, 15, ri_u64_0_MAX_1024_15)
-  (usize: 0, std::usize::MAX, 1024, 15, ri_usize_0_MAX_1024_15)
-  (i8: std::i8::MIN, std::i8::MAX, 1024, 15, ri_i8_MIN_MAX_1024_15)
-  (i16: std::i16::MIN, std::i16::MAX, 1024, 15, ri_i16_MIN_MAX_1024_15)
-  (i32: std::i32::MIN, std::i32::MAX, 1024, 15, ri_i32_MIN_MAX_1024_15)
-  (i64: std::i64::MIN, std::i64::MAX, 1024, 15, ri_i64_MIN_MAX_1024_15)
-  (isize: std::isize::MIN, std::isize::MAX, 1024, 15, ri_isize_MIN_MAX_1024_15)
+  (u8: 0, u8::MAX, 1024, 15, ri_u8_0_MAX_1024_15)
+  (u16: 0, u16::MAX, 1024, 15, ri_u16_0_MAX_1024_15)
+  (u32: 0, u32::MAX, 1024, 15, ri_u32_0_MAX_1024_15)
+  (u64: 0, u64::MAX, 1024, 15, ri_u64_0_MAX_1024_15)
+  (usize: 0, usize::MAX, 1024, 15, ri_usize_0_MAX_1024_15)
+  (i8: i8::MIN, i8::MAX, 1024, 15, ri_i8_MIN_MAX_1024_15)
+  (i16: i16::MIN, i16::MAX, 1024, 15, ri_i16_MIN_MAX_1024_15)
+  (i32: i32::MIN, i32::MAX, 1024, 15, ri_i32_MIN_MAX_1024_15)
+  (i64: i64::MIN, i64::MAX, 1024, 15, ri_i64_MIN_MAX_1024_15)
+  (isize: isize::MIN, isize::MAX, 1024, 15, ri_isize_MIN_MAX_1024_15)
 }

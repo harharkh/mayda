@@ -137,9 +137,8 @@ impl<B: Bits> Unimodal<B> {
   /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
   /// let bits = Unimodal::from_slice(&input).unwrap();
   ///
-  /// let mut output: Vec<u32> = vec![0; 8];
-  /// let length: usize = bits.decode_into(&mut *output);
-  /// assert_eq!(*input, output[..length]);
+  /// let output = bits.decode();
+  /// assert_eq!(input, output);
   /// ```
   #[inline]
   pub fn from_slice(slice: &[B]) -> Result<Self, super::Error> {
