@@ -38,7 +38,7 @@ fn rand_outliers<T>(mean: T, std_dev: T, length: usize) -> Vec<T>
   }
   output
 }
-/*
+
 macro_rules! encode_bench {
   ($(($t: ty: $mean: expr, $std_dev: expr, $length: expr, $name: ident))*) => ($(
     #[bench]
@@ -142,7 +142,7 @@ indexing_bench!{
   (u32: 1024, 32, 32768, 32767, idx_u32_1024_32_32768_32767)
   (u64: 1024, 32, 32768, 32767, idx_u64_1024_32_32768_32767)
 }
-*/
+
 macro_rules! range_bench {
   ($(($t: ty: $mean: expr, $std_dev: expr, $length: expr, $lwr: expr, $upr: expr, $name: ident))*) => ($(
     #[bench]
