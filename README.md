@@ -4,17 +4,17 @@
 [![Latest Version](https://img.shields.io/crates/v/mayda.svg)](https://crates.io/crates/mayda)
 ![Works on nightly](https://img.shields.io/badge/works%20on-nightly-lightgrey.svg)
 
-A Rust library to compress integer arrays (all primitive integer types are
-supported). The design favors decompression speed and the ability to index the
-compressed array over the compression ratio, on the principle that the runtime
-penalty for using compressed arrays should be as small as possible.
+`mayda` is a Rust library to compress integer arrays (all primitive integer
+types are supported). The design favors decompression speed and the ability to
+index the compressed array over the compression ratio, on the principle that
+the runtime penalty for using compressed arrays should be as small as possible.
 
 This crate provides three variations on a single compression algorithm. The
-[`Uniform`] type can decompress around five billion `u32`s per second, or 20
-GiB/s of decompressed integers, on a 2.6 GHz Intel Core i7-6700HQ processor.
-The [`Monotone`] and [`Unimodal`] types decompress at around half the speed,
-but can have much better compression ratios depending on the distribution of
-the integers.
+[`Uniform`] type can decompress around six billion `u32`s per second, or 24
+GiB/s of decompressed integers, on a 2.6 GHz Intel Core i7-6700HQ processor
+(see below for specifics). The [`Monotone`] and [`Unimodal`] types decompress
+at around half the speed, but can have much better compression ratios depending
+on the distribution of the integers.
 
 Compiling `mayda` requires the **nightly** compiler and CPU support for the
 SSE2 instruction set (any Intel or AMD processor manufactured after 2003). The
@@ -132,10 +132,10 @@ for _ in 0..(length / 16) {
 
 The performance of the [`Uniform`], [`Monotone`] and [`Unimodal`] types for
 these three vectors on a 2.6 GHz Intel Core i7-6700HQ processor is given below.
-Encoding and decoding speeds are reported in billions of integers per second,
-time required to index the last entry is reported in nanoseconds, and
-compression is reported as bits per integer. Native encoding and decoding
-speeds allocate memory and perform a memcpy. The Shannon entropy is a
+Encoding and decoding speeds using `decode_into` are reported in billions of
+integers per second, time required to index the last entry is reported in
+nanoseconds, and compression is reported as bits per integer. Native encoding
+and decoding speed measurements perform a memcpy. The Shannon entropy is a
 reasonable target for the bits per integer.
 
 For `input1` the Shannon entropy is 10.00. `Uniform` is preferrable in every
@@ -143,30 +143,30 @@ respect for the general case.
 
 |          | Encode (BInt/s) | Decode (BInt/s) | Index (ns) | Bits/Int |
 |----------|-----------------|-----------------|------------|----------|
-| Uniform  |       1.26      |       5.28      |     29     |   10.63  |
-| Monotone |       1.19      |       2.45      |     68     |   32.63  |
-| Unimodal |       0.21      |       2.13      |     53     |   11.16  |
-| Native   |      14.03      |      14.03      |      0     |    32    |
+| Uniform  |       1.27      |       5.92      |     28     |   10.63  |
+| Monotone |       1.18      |       2.35      |     69     |   32.63  |
+| Unimodal |       0.21      |       2.23      |     55     |   11.16  |
+| Native   |      20.08      |      20.08      |      0     |    32    |
 
 For `input2` the Shannon entropy is 10.00, but the additional structure is used
 by `Monotone` to improve compression.
 
 |          | Encode (BInt/s) | Decode (BInt/s) | Index (ns) | Bits/Int |
 |----------|-----------------|-----------------|------------|----------|
-| Uniform  |       1.21      |       5.22      |     29     |   8.25   |
-| Monotone |       1.25      |       2.41      |     68     |    3.5   |
-| Unimodal |       0.24      |       2.35      |     52     |   8.13   |
-| Native   |      14.03      |      14.03      |      0     |    32    |
+| Uniform  |       1.28      |       6.06      |     28     |   8.00   |
+| Monotone |       1.24      |       2.27      |     67     |   3.63   |
+| Unimodal |       0.24      |       2.57      |     30     |   8.19   |
+| Native   |      20.08      |      20.08      |      0     |    32    |
 
 For `input3` the Shannon entropy is 12.46, but compression is difficult due to
 the presence of outliers. `Unimodal` gives the most robust compression.
 
 |          | Encode (BInt/s) | Decode (BInt/s) | Index (ns) | Bits/Int |
 |----------|-----------------|-----------------|------------|----------|
-| Uniform  |       1.21      |       5.25      |     29     |   32.63  |
-| Monotone |       1.16      |       2.45      |     66     |   32.63  |
-| Unimodal |       0.18      |       1.61      |     63     |   12.50  |
-| Native   |      14.03      |      14.03      |      0     |    32    |
+| Uniform  |       1.23      |       6.21      |     28     |   32.63  |
+| Monotone |       1.18      |       2.35      |     70     |   32.63  |
+| Unimodal |       0.16      |       1.68      |     60     |   12.50  |
+| Native   |      20.08      |      20.08      |      0     |    32    |
 
 ## License
 

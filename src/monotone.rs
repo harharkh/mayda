@@ -78,9 +78,10 @@ const E_COUNT: u32 = 0x00007f80;
 /// # Performance
 ///
 /// Decoding does not allocate except for the return value, and decodes around
-/// 7.5 GiB/s of decoded integers. Encoding allocates `O(n)` memory (`n` in the
-/// length of the array), and encodes around 4.5 GiB/s of decoded integers. Run
-/// `cargo bench --bench monotone` for performance numbers on your setup.
+/// 7.5 GiB/s of decoded integers on difficult inputs. Encoding allocates `O(n)`
+/// memory (`n` in the length of the array), and encodes around 4.5 GiB/s of
+/// decoded integers. Run `cargo bench --bench monotone` for performance
+/// numbers on your setup.
 ///
 /// The performance (speed and compression) degrades gradually as the number of
 /// entries falls below 128.

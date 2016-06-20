@@ -5,10 +5,18 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-//! This crate provides three types to compress integer arrays. The design
-//! generally favors decompression speed and the ability to index the
-//! compressed array over the compression ratio, on the principle that the 
-//! runtime penalty for using compressed arrays should be as small as possible.
+//! `mayda` is a library to compress integer arrays (all primitive integer
+//! types are supported). The design favors decompression speed and the ability
+//! to index the compressed array over the compression ratio, on the principle
+//! that the runtime penalty for using compressed arrays should be as small as
+//! possible.
+//! 
+//! This crate provides three variations on a single compression algorithm. The
+//! `Uniform` type can decompress around six billion `u32`s per second, or 24
+//! GiB/s of decompressed integers, on a 2.6 GHz Intel Core i7-6700HQ processor
+//! (see the README for specifics). The `Monotone` and `Unimodal` types
+//! decompress at around half the speed, but can have much better compression
+//! ratios depending on the distribution of the integers.
 //!
 //! # Usage
 //! 
@@ -16,7 +24,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! mayda = "0.1"
+//! mayda = "^0.1"
 //! ```
 //!
 //! and this to your crate root:

@@ -86,10 +86,10 @@ const I_WIDTH: u32 = 0xe0000000;
 /// # Performance
 ///
 /// Decoding does not allocate except for the return value, and decodes around
-/// 6 GiB/s of decoded integers. Encoding allocates `O(n)` memory (`n` in the
-/// length of the array), and encodes around 250 MiB/s of decoded integers.
-/// Around three-fourths of the encoding runtime is due to the algorithm
-/// `utility::select_m` used to find the median of a block. Run
+/// 6 GiB/s of decoded integers on difficult inputs. Encoding allocates `O(n)`
+/// memory (`n` in the length of the array), and encodes around 250 MiB/s of
+/// decoded integers. Around three-fourths of the encoding runtime is due to
+/// the algorithm `utility::select_m` used to find the median of a block. Run
 /// `cargo bench --bench unimodal` for performance numbers on your setup.
 ///
 /// The performance (speed and compression) degrades gradually as the number of
