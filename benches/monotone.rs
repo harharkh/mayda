@@ -13,7 +13,7 @@ extern crate mayda;
 extern crate rand;
 extern crate test;
 
-use mayda::{Access, Encode, Monotone};
+use mayda::{Access, AccessInto, Encode, Monotone};
 use rand::distributions::{IndependentSample, Range};
 use std::{u8, u16, u32, u64, i8, i16, i32, i64};
 use test::Bencher;
@@ -141,11 +141,11 @@ macro_rules! range_bench {
       let mut bin = Monotone::new();
       let input: Vec<$t> = rand_increasing($min, $max, $length);
       bin.encode(&input).unwrap();
-      let mut vec = Vec::new();
+      let mut output = vec![0; $upr - $lwr];
       b.iter(|| {
-        vec = bin.access($lwr..$upr);
+        bin.access_into($lwr..$upr, &mut *output);
       });
-      assert_eq!(&input[$lwr..$upr], &vec[..]);
+      assert_eq!(&input[$lwr..$upr], &output[..]);
     }
   )*)
 }

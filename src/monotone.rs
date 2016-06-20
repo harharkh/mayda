@@ -23,6 +23,9 @@
 //! let mut bits = Monotone::new();
 //! bits.encode(&input).unwrap();
 //!
+//! let length = bits.len();
+//! assert_eq!(length, 6);
+//!
 //! let output = bits.decode();
 //! assert_eq!(input, output);
 //!
@@ -37,7 +40,7 @@ use std::marker::PhantomData;
 use std::{mem, ops, ptr, usize};
 
 use mayda_codec;
-use utility::{self, Bits, Encode, Access};
+use utility::{self, Bits, Encode, Access, AccessInto};
 
 const E_WIDTH: u32 = 0x0000007f;
 const E_COUNT: u32 = 0x00007f80;
@@ -58,6 +61,9 @@ const E_COUNT: u32 = 0x00007f80;
 /// let input: Vec<u32> = vec![1, 5, 7, 15, 20, 27];
 /// let mut bits = Monotone::new();
 /// bits.encode(&input).unwrap();
+///
+/// let length = bits.len();
+/// assert_eq!(length, 6);
 ///
 /// let output = bits.decode();
 /// assert_eq!(input, output);
@@ -154,7 +160,7 @@ impl<B: Bits> Monotone<B> {
   }
 
   /// Returns the number of encoded entries. Note that since the length has to
-  /// be calculated, `Monotone::len()` is slower than `Slice::len()`.
+  /// be calculated, `Monotone::len()` is more expensive than `Slice::len()`.
   ///
   /// # Examples
   /// ```
@@ -484,12 +490,12 @@ macro_rules! encodable_unsigned {
 
           let mut acc: $ty = *(s_ptr as *const $ty);
           s_ptr = s_ptr.offset(ty_wrd as isize);
-
-          for _ in 0..128 {
-            acc = acc.wrapping_add(*o_ptr);
-            *o_ptr = acc;
-            o_ptr = o_ptr.offset(1);
+          for a in 0..128 {
+            acc = acc.wrapping_add(*o_ptr.offset(a));
+            *o_ptr.offset(a) = acc;
           }
+
+          o_ptr = o_ptr.offset(128);
         }
 
         // Final block
@@ -507,10 +513,9 @@ macro_rules! encodable_unsigned {
         s_ptr = Monotone::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
 
         let mut acc: $ty = *(s_ptr as *const $ty);
-        for _ in 0..left {
-          acc = acc.wrapping_add(*o_ptr);
-          *o_ptr = acc;
-          o_ptr = o_ptr.offset(1);
+        for a in 0..(left as isize) {
+          acc = acc.wrapping_add(*o_ptr.offset(a));
+          *o_ptr.offset(a) = acc;
         }
 
         length
@@ -577,7 +582,7 @@ macro_rules! encodable_unsigned {
           let bits: u32 = part as u32 * e_wd;
           mayda_codec::$enc[e_wd as usize][(part / $step - 1) as usize](c_ptr, s_ptr);
           c_ptr = c_ptr.offset(part as isize);
-          s_ptr = s_ptr.offset((bits / 32) as isize);
+          s_ptr = s_ptr.offset((bits >> 5) as isize);
           s_bits -= bits & 31;
           e_cnt -= part;
         }
@@ -694,7 +699,7 @@ macro_rules! encodable_unsigned {
           let part: usize = e_cnt - e_cnt % $step;
           let bits: u32 = part as u32 * e_wd;
           mayda_codec::$dec[e_wd as usize][(part / $step - 1) as usize](s_ptr, o_ptr);
-          s_ptr = s_ptr.offset((bits / 32) as isize);
+          s_ptr = s_ptr.offset((bits >> 5) as isize);
           o_ptr = o_ptr.offset(part as isize);
           s_bits -= bits & 31;
           e_cnt -= part;
@@ -772,6 +777,19 @@ encodable_unsigned!{
    ENCODE_U64, DECODE_U64,
    ENCODE_SIMD_U64, DECODE_SIMD_U64,
    encode_delta_u64)
+}
+
+#[cfg(target_pointer_width = "16")]
+impl EncodePrivate<usize> for Monotone<usize> {
+  #[inline]
+  unsafe fn _encode(storage: &[usize]) -> Result<Vec<u32>, super::Error> {
+    Monotone::<u16>::_encode(mem::transmute(storage))
+  }
+
+  #[inline]
+  unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [usize]) -> usize {
+    Monotone::<u16>::_decode(storage, n_blks, mem::transmute(output))
+  }
 }
 
 #[cfg(target_pointer_width = "32")]
@@ -956,6 +974,19 @@ encodable_signed!{
   (i64: u64, encode_delta_u64)
 }
 
+#[cfg(target_pointer_width = "16")]
+impl EncodePrivate<isize> for Monotone<isize> {
+  #[inline]
+  unsafe fn _encode(storage: &[isize]) -> Result<Vec<u32>, super::Error> {
+    Monotone::<i16>::_encode(mem::transmute(storage))
+  }
+
+  #[inline]
+  unsafe fn _decode(storage: &[u32], n_blks: usize, output: &mut [isize]) -> usize {
+    Monotone::<u16>::_decode(storage, n_blks, left, mem::transmute(output))
+  }
+}
+
 #[cfg(target_pointer_width = "32")]
 impl EncodePrivate<isize> for Monotone<isize> {
   #[inline]
@@ -986,51 +1017,112 @@ impl EncodePrivate<isize> for Monotone<isize> {
 // Implementations of Access
 ////////////////////////////////////////////////////////////////////////////////
 
-/// The private interface of an `Access` type. Allows the implementation to be
-/// shared for different types.
-trait AccessPrivate<Idx> {
-  /// The type returned by the access operation.
-  type Output;
+// Private traits
 
-  /// The method for the access `foo.access(bar)` operation.
-  unsafe fn _access(&[u32], Idx) -> Self::Output;
+trait AccessOne<B: Bits> {
+  /// The method for the range access operation.
+  unsafe fn _access_one(&[u32], usize) -> B;
 }
 
-macro_rules! access_default {
-  ($(($idx: ty, $output: ty))*) => ($(
-    impl<B: Bits> AccessPrivate<$idx> for Monotone<B> {
-      type Output = $output;
+trait AccessMany<B: Bits, Range> {
+  /// The method for the range access operation.
+  unsafe fn _access_many(&[u32], usize, Range, &mut [B]) -> usize;
+}
 
-      default unsafe fn _access(_: &[u32], _: $idx) -> $output {
-        panic!("Access not implemented for this type");
-      }
+// Defaults
+
+impl<B: Bits> AccessOne<B> for Monotone<B> {
+  default unsafe fn _access_one(_: &[u32], _: usize) -> B {
+    panic!("Access not implemented for this type");
+  }
+}
+
+impl<B: Bits> AccessMany<B, ops::Range<usize>> for Monotone<B> {
+  default unsafe fn _access_many(_: &[u32],
+                                 _: usize,
+                                 _: ops::Range<usize>,
+                                 _: &mut [B]) -> usize {
+    panic!("Access not implemented for this type");
+  }
+}
+
+impl<B: Bits> AccessMany<B, ops::RangeFrom<usize>> for Monotone<B> {
+  default unsafe fn _access_many(_: &[u32],
+                                 _: usize,
+                                 _: ops::RangeFrom<usize>,
+                                 _: &mut [B]) -> usize {
+    panic!("Access not implemented for this type");
+  }
+}
+
+// External interface
+
+impl<B: Bits> Access<usize> for Monotone<B> {
+  type Output = B;
+
+  #[inline]
+  fn access(&self, index: usize) -> B {
+    unsafe { Monotone::<B>::_access_one(&*self.storage, index) }
+  }
+}
+
+impl<B: Bits> Access<ops::Range<usize>> for Monotone<B> {
+  type Output = Vec<B>;
+
+  fn access(&self, range: ops::Range<usize>) -> Vec<B> {
+    if range.end < range.start {
+      panic!(format!("range start is {} but range end is {}", range.start, range.end))
     }
-  )*)
-}
-
-access_default!{
-  (usize, B)
-  (ops::Range<usize>, Vec<B>)
-  (ops::RangeFrom<usize>, Vec<B>)
-}
-
-macro_rules! access {
-  ($(($idx: ty, $output: ty))*) => ($(
-    impl<B: Bits> Access<$idx> for Monotone<B> {
-      type Output = $output;
-
-      #[inline]
-      fn access(&self, index: $idx) -> $output {
-        unsafe { Monotone::<B>::_access(&*self.storage, index) }
+    if self.storage.is_empty() {
+      if range.start > 0 {
+        panic!(format!("range start is {} but length is 0", range.start))
       }
+      if range.end > 0 {
+        panic!(format!("range end is {} but length is 0", range.end))
+      }
+      return Vec::new();
     }
-  )*)
+
+    let s_ptr: *const u32 = self.storage.as_ptr();
+    let n_blks: usize = unsafe { (*s_ptr >> 2) as usize };
+    let o_length: usize = range.end - range.start;
+    let mut output: Vec<B> = Vec::with_capacity(o_length);
+
+    unsafe {
+      output.set_len(o_length);
+      Monotone::<B>::_access_many(&*self.storage, n_blks, range, &mut *output);
+    }
+
+    output
+  }
 }
 
-access!{
-  (usize, B)
-  (ops::Range<usize>, Vec<B>)
-  (ops::RangeFrom<usize>, Vec<B>)
+impl<B: Bits> Access<ops::RangeFrom<usize>> for Monotone<B> {
+  type Output = Vec<B>;
+
+  fn access(&self, range: ops::RangeFrom<usize>) -> Vec<B> {
+    if self.storage.is_empty() {
+      if range.start > 0 {
+        panic!(format!("range start is {} but length is 0", range.start))
+      }
+      return Vec::new();
+    }
+
+    let s_ptr: *const u32 = self.storage.as_ptr();
+    let n_blks: usize = unsafe { (*s_ptr >> 2) as usize };
+    let len_bnd: usize = (n_blks + 1) << 7;
+    let mut output: Vec<B> = Vec::with_capacity(len_bnd);
+
+    unsafe {
+      output.set_len(len_bnd);
+      let length: usize = Monotone::<B>::_access_many(
+        &*self.storage, n_blks, range, &mut *output
+      );
+      output.set_len(length);
+    }
+
+    output
+  }
 }
 
 impl<B: Bits> Access<ops::RangeTo<usize>> for Monotone<B> {
@@ -1075,6 +1167,82 @@ impl<B: Bits> Access<ops::RangeToInclusive<usize>> for Monotone<B> {
   }
 }
 
+impl<B: Bits> AccessInto<ops::Range<usize>, B> for Monotone<B> {
+  fn access_into(&self, range: ops::Range<usize>, output: &mut [B]) -> usize {
+    if range.end < range.start {
+      panic!(format!("range start is {} but range end is {}", range.start, range.end))
+    }
+    if self.storage.is_empty() {
+      if range.start > 0 {
+        panic!(format!("range start is {} but length is 0", range.start))
+      }
+      if range.end > 0 {
+        panic!(format!("range end is {} but length is 0", range.end))
+      }
+      return 0;
+    }
+
+    let s_ptr: *const u32 = self.storage.as_ptr();
+    unsafe {
+      let n_blks: usize = (*s_ptr >> 2) as usize;
+      Monotone::<B>::_access_many(&*self.storage, n_blks, range, output)
+    }
+  }
+}
+
+impl<B: Bits> AccessInto<ops::RangeFrom<usize>, B> for Monotone<B> {
+  fn access_into(&self, range: ops::RangeFrom<usize>, output: &mut [B]) -> usize {
+    if self.storage.is_empty() {
+      if range.start > 0 {
+        panic!(format!("range start is {} but length is 0", range.start))
+      }
+      return 0;
+    }
+
+    let s_ptr: *const u32 = self.storage.as_ptr();
+    unsafe {
+      let n_blks: usize = (*s_ptr >> 2) as usize;
+      Monotone::<B>::_access_many(&*self.storage, n_blks, range, &mut *output)
+    }
+  }
+}
+
+impl<B: Bits> AccessInto<ops::RangeTo<usize>, B> for Monotone<B> {
+  #[inline]
+  fn access_into(&self, range: ops::RangeTo<usize>, output: &mut [B]) -> usize {
+    self.access_into(0..range.end, output)
+  }
+}
+
+impl<B: Bits> AccessInto<ops::RangeFull, B> for Monotone<B> {
+  #[inline]
+  fn access_into(&self, _: ops::RangeFull, output: &mut [B]) -> usize {
+    self.decode_into(output)
+  }
+}
+
+impl<B: Bits> AccessInto<ops::RangeInclusive<usize>, B> for Monotone<B> {
+  #[inline]
+  fn access_into(&self, range: ops::RangeInclusive<usize>, output: &mut [B]) -> usize {
+    match range {
+      ops::RangeInclusive::Empty { .. } => 0,
+      ops::RangeInclusive::NonEmpty { end, .. } if end == usize::MAX =>
+        panic!("attempted to index slice up to maximum usize"),
+      ops::RangeInclusive::NonEmpty { start, end } =>
+        self.access_into(start..(end + 1), output)
+    }
+  }
+}
+
+impl<B: Bits> AccessInto<ops::RangeToInclusive<usize>, B> for Monotone<B> {
+  #[inline]
+  fn access_into(&self, range: ops::RangeToInclusive<usize>, output: &mut [B]) -> usize {
+    self.access_into(0...range.end, output)
+  }
+}
+
+// Actual implementations
+
 /// Calculates the offset in words to the start of the block. Not intended to
 /// be used outside the implementation of `Access`.
 fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> usize {
@@ -1094,28 +1262,28 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
     let shift: u32 = w_idx.trailing_zeros() + 1;
     for _ in 1..shift {
       let l_wd: u32 = base_wd + lvl;
-      let len: usize = ((n_blks - (1 << lvl)) >> (lvl + 1)) + 1;
+      let len: usize = (n_blks + (1 << lvl)) >> (lvl + 1);
       lvl_head += utility::words_for_bits(l_wd * len as u32);
       lvl += 1;
     }
     w_idx >>= shift;
 
     let l_wd: u32 = base_wd + lvl;
-    let len: usize = ((n_blks - (1 << lvl)) >> (lvl + 1)) + 1;
+    let len: usize = (n_blks + (1 << lvl)) >> (lvl + 1);
     unsafe {
       s_ptr = s_head.offset(lvl_head as isize);
       if (w_idx & !127) + 128 <= len {
         // Width encoded using SIMD
-        let l_bits: u32 = (w_idx as u32 / 2) * l_wd;
+        let l_bits: u32 = (w_idx as u32 >> 1) * l_wd;
         let w_bits: u32 = 64 - (l_bits & 63);
 
         let mut w_ptr: *const u64 = s_ptr as *const u64;
-        w_ptr = w_ptr.offset(((w_idx as u32 & 1) + (l_bits / 64) * 2) as isize);
+        let w_sft: u32 = ((l_bits >> 5) & !1) | (w_idx as u32 & 1); 
+        w_ptr = w_ptr.offset(w_sft as isize);
 
-        output = *w_ptr >> (64 - w_bits);
+        output = *w_ptr >> (l_bits & 63);
         if l_wd > w_bits {
-          w_ptr = w_ptr.offset(2);
-          output |= *w_ptr << w_bits;
+          output |= *w_ptr.offset(2) << w_bits;
         }
       } else {
         // Width encoded using u32
@@ -1123,9 +1291,9 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
         let mut s_bits: u32 = 32 - (l_bits & 31);
         let mut o_bits: u32 = l_wd;
 
-        s_ptr = s_ptr.offset((l_bits / 32) as isize);
+        s_ptr = s_ptr.offset((l_bits >> 5) as isize);
 
-        output = (*s_ptr >> (32 - s_bits)) as u64;
+        output = (*s_ptr >> (l_bits & 31)) as u64;
         while o_bits > s_bits {
           o_bits -= s_bits;
           s_ptr = s_ptr.offset(1);
@@ -1141,38 +1309,38 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
       let shift: u32 = w_idx.trailing_zeros() + 1;
       for _ in 0..shift {
         let l_wd: u32 = base_wd + lvl;
-        let len: usize = ((n_blks - (1 << lvl)) >> (lvl + 1)) + 1;
+        let len: usize = (n_blks + (1 << lvl)) >> (lvl + 1);
         lvl_head += utility::words_for_bits(l_wd * len as u32);
         lvl += 1;
       }
       w_idx >>= shift;
 
       let l_wd: u32 = base_wd + lvl;
-      let len: usize = ((n_blks - (1 << lvl)) >> (lvl + 1)) + 1;
+      let len: usize = (n_blks + (1 << lvl)) >> (lvl + 1);
       unsafe {
         s_ptr = s_head.offset(lvl_head as isize);
         if (w_idx & !127) + 128 <= len {
           // Width encoded using SIMD
-          let l_bits: u32 = (w_idx as u32 / 2) * l_wd;
+          let l_bits: u32 = (w_idx as u32 >> 1) * l_wd;
           let w_bits: u32 = 64 - (l_bits & 63);
 
           let mut w_ptr: *const u64 = s_ptr as *const u64;
-          w_ptr = w_ptr.offset(((w_idx as u32 & 1) + (l_bits / 64) * 2) as isize);
+          let w_sft: u32 = ((l_bits >> 5) & !1) | (w_idx as u32 & 1); 
+          w_ptr = w_ptr.offset(w_sft as isize);
 
-          output = *w_ptr >> (64 - w_bits);
+          output = *w_ptr >> (l_bits & 63);
           if l_wd > w_bits {
-            w_ptr = w_ptr.offset(2);
-            output |= *w_ptr << w_bits;
+            output |= *w_ptr.offset(2) << w_bits;
           }
         } else {
           // Width encoded using u32
-          let bits: u32 = w_idx as u32 * l_wd;
-          let mut s_bits: u32 = 32 - (bits & 31);
+          let l_bits: u32 = w_idx as u32 * l_wd;
+          let mut s_bits: u32 = 32 - (l_bits & 31);
           let mut o_bits: u32 = l_wd;
 
-          s_ptr = s_ptr.offset((bits / 32) as isize);
+          s_ptr = s_ptr.offset((l_bits >> 5) as isize);
 
-          output = (*s_ptr >> (32 - s_bits)) as u64;
+          output = (*s_ptr >> (l_bits & 31)) as u64;
           while o_bits > s_bits {
             o_bits -= s_bits;
             s_ptr = s_ptr.offset(1);
@@ -1183,7 +1351,7 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
       }
       wrd_to_blk += (output & (!0 >> (64 - l_wd))) as usize;
     }
-    wrd_to_blk = blk * (1 + ty_wrd) + 4 * wrd_to_blk;
+    wrd_to_blk = blk * (1 + ty_wrd) + (wrd_to_blk << 2);
   }
 
   // Include the header words
@@ -1199,13 +1367,14 @@ fn words_to_block(n_blks: usize, blk: usize, ty_wd: u32, s_head: *const u32) -> 
 
 macro_rules! access_unsigned {
   ($(($ty: ident: $step: expr, $dec: ident, $dec_simd: ident))*) => ($(
-    impl AccessPrivate<usize> for Monotone<$ty> {
-      unsafe fn _access(storage: &[u32], index: usize) -> $ty {
+    impl AccessOne<$ty> for Monotone<$ty> {
+      unsafe fn _access_one(storage: &[u32], index: usize) -> $ty {
         if storage.is_empty() {
           panic!(format!("index is {} but length is 0", index))
         }
 
-        let n_blks: usize = (storage[0] >> 2) as usize;
+        let mut s_ptr: *const u32 = storage.as_ptr();
+        let n_blks: usize = (*s_ptr >> 2) as usize;
         let blk: usize = index >> 7;
         if blk > n_blks {
           let len_bnd: usize = (n_blks + 1) << 7;
@@ -1214,7 +1383,6 @@ macro_rules! access_unsigned {
 
         // Find the block containing the range start
         let ty_wd: u32 = $ty::width();
-        let mut s_ptr: *const u32 = storage.as_ptr();
         let wrd_to_blk: usize = words_to_block(n_blks, blk, ty_wd, s_ptr);
 
         // Block found, decode the block
@@ -1243,23 +1411,9 @@ macro_rules! access_unsigned {
       }
     }
 
-    impl AccessPrivate<ops::Range<usize>> for Monotone<$ty> {
-      unsafe fn _access(storage: &[u32], range: ops::Range<usize>) -> Vec<$ty> {
-        if range.end < range.start {
-          panic!(format!("range start is {} but range end is {}", range.start, range.end))
-        }
-        if storage.is_empty() {
-          if range.start > 0 {
-            panic!(format!("range start is {} but length is 0", range.start))
-          }
-          if range.end > 0 {
-            panic!(format!("range end is {} but length is 0", range.end))
-          }
-          return Vec::new();
-        }
-
-        let mut s_ptr: *const u32 = storage.as_ptr();
-        let n_blks: usize = (*s_ptr >> 2) as usize;
+    impl AccessMany<$ty, ops::Range<usize>> for Monotone<$ty> {
+      unsafe fn _access_many(storage: &[u32], n_blks: usize,
+                             range: ops::Range<usize>, output: &mut [$ty]) -> usize {
         let s_blk: usize = range.start >> 7;
         if s_blk > n_blks {
           let len_bnd: usize = (n_blks + 1) << 7;
@@ -1270,22 +1424,29 @@ macro_rules! access_unsigned {
           let len_bnd: usize = (n_blks + 1) << 7;
           panic!(format!("range end is {} but length < {}", range.end, len_bnd))
         }
+        let o_length: usize = range.end - range.start;
+        if output.len() < o_length {
+          panic!(
+            format!("range length is {} but slice length is {}", o_length, output.len())
+          );
+        }
         let lwr: usize = range.start - (s_blk << 7);
         let upr: usize = range.end - (e_blk << 7);
-        let o_length: usize = range.end - range.start;
 
-        // Find the block containing the range start
         let ty_wd: u32 = $ty::width();
         let ty_wrd: usize = utility::words_for_bits(ty_wd);
+
+        // Find the block containing the range start
+        let mut s_ptr: *const u32 = storage.as_ptr();
         let wrd_to_blk: usize = words_to_block(n_blks, s_blk, ty_wd, s_ptr);
+        s_ptr = s_ptr.offset(wrd_to_blk as isize);
 
         // Prepare return variable
-        let mut output: Vec<$ty> = Vec::with_capacity((e_blk - s_blk + 1) << 7);
+        let mut scratch: [$ty; 128] = [0; 128];
+        let c_ptr: *mut $ty = scratch.as_mut_ptr();
         let mut o_ptr: *mut $ty = output.as_mut_ptr();
 
         // Start block known, decode the range
-        s_ptr = s_ptr.offset(wrd_to_blk as isize);
-
         if s_blk == e_blk {
           // Find the width of the block
           let e_wd: u32 = *s_ptr & E_WIDTH;
@@ -1301,40 +1462,39 @@ macro_rules! access_unsigned {
             panic!(format!("range end is {} but length is {}", range.end, len_bnd))
           }
           if range.start == range.end {
-            return Vec::new();
+            return 0;
           }
 
           // Decode the block
-          s_ptr = Monotone::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
+          s_ptr = Monotone::<$ty>::_decode_tail(s_ptr, c_ptr, left, e_wd);
 
           let mut acc: $ty = *(s_ptr as *const $ty);
           for a in 0..(upr as isize) {
-            acc = acc.wrapping_add(*o_ptr.offset(a));
-            *o_ptr.offset(a) = acc;
+            acc = acc.wrapping_add(*c_ptr.offset(a));
+            *c_ptr.offset(a) = acc;
           }
 
-          ptr::copy(o_ptr.offset(lwr as isize), o_ptr, o_length);
-          output.set_len(o_length);
+          ptr::copy_nonoverlapping(c_ptr.offset(lwr as isize), o_ptr, o_length);
 
-          output
+          o_length
         } else {
           // Initial block
           let e_wd: u32 = *s_ptr & E_WIDTH;
           s_ptr = s_ptr.offset(1);
 
           // Decode initial block
-          mayda_codec::$dec_simd[e_wd as usize](s_ptr, o_ptr);
-          s_ptr = s_ptr.offset(4 * e_wd as isize);
+          mayda_codec::$dec_simd[e_wd as usize](s_ptr, c_ptr);
+          s_ptr = s_ptr.offset((e_wd << 2) as isize);
 
           let mut acc: $ty = *(s_ptr as *const $ty);
           s_ptr = s_ptr.offset(ty_wrd as isize);
           for a in 0..128 {
-            acc = acc.wrapping_add(*o_ptr.offset(a));
-            *o_ptr.offset(a) = acc;
+            acc = acc.wrapping_add(*c_ptr.offset(a));
+            *c_ptr.offset(a) = acc;
           }
 
           let count: usize = 128 - lwr;
-          ptr::copy(o_ptr.offset(lwr as isize), o_ptr, count);
+          ptr::copy_nonoverlapping(c_ptr.offset(lwr as isize), o_ptr, count);
           o_ptr = o_ptr.offset(count as isize);
 
           // Block size is known for all but the final block
@@ -1345,7 +1505,7 @@ macro_rules! access_unsigned {
 
             // Decode the block
             mayda_codec::$dec_simd[e_wd as usize](s_ptr, o_ptr);
-            s_ptr = s_ptr.offset(4 * e_wd as isize);
+            s_ptr = s_ptr.offset((e_wd << 2) as isize);
 
             let mut acc: $ty = *(s_ptr as *const $ty);
             s_ptr = s_ptr.offset(ty_wrd as isize);
@@ -1364,43 +1524,29 @@ macro_rules! access_unsigned {
 
           // Checks a lower bound on the length
           let len_bnd: usize = (e_blk << 7) + left;
-          if range.start > len_bnd {
-            panic!(format!("range start is {} but length is {}", range.start, len_bnd))
-          }
           if range.end > len_bnd {
             panic!(format!("range end is {} but length is {}", range.end, len_bnd))
           }
-          if range.start == range.end {
-            return Vec::new();
-          }
 
           // Decode final block
-          s_ptr = Monotone::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
+          s_ptr = Monotone::<$ty>::_decode_tail(s_ptr, c_ptr, left, e_wd);
 
           let mut acc: $ty = *(s_ptr as *const $ty);
           for a in 0..(upr as isize) {
-            acc = acc.wrapping_add(*o_ptr.offset(a));
-            *o_ptr.offset(a) = acc;
+            acc = acc.wrapping_add(*c_ptr.offset(a));
+            *c_ptr.offset(a) = acc;
           }
 
-          output.set_len(o_length);
+          ptr::copy_nonoverlapping(c_ptr, o_ptr, upr);
 
-          output
+          o_length
         }
       }
     }
 
-    impl AccessPrivate<ops::RangeFrom<usize>> for Monotone<$ty> {
-      unsafe fn _access(storage: &[u32], range: ops::RangeFrom<usize>) -> Vec<$ty> {
-        if storage.is_empty() {
-          if range.start > 0 {
-            panic!(format!("range start is {} but length is 0", range.start))
-          }
-          return Vec::new();
-        }
-
-        let mut s_ptr: *const u32 = storage.as_ptr();
-        let n_blks: usize = (*s_ptr >> 2) as usize;
+    impl AccessMany<$ty, ops::RangeFrom<usize>> for Monotone<$ty> {
+      unsafe fn _access_many(storage: &[u32], n_blks: usize,
+                             range: ops::RangeFrom<usize>, output: &mut [$ty]) -> usize {
         let s_blk: usize = range.start >> 7;
         if s_blk > n_blks {
           let len_bnd: usize = (n_blks + 1) << 7;
@@ -1408,18 +1554,20 @@ macro_rules! access_unsigned {
         }
         let lwr: usize = range.start - (s_blk << 7);
 
-        // Find the block containing the range start
         let ty_wd: u32 = $ty::width();
         let ty_wrd: usize = utility::words_for_bits(ty_wd);
+
+        // Find the block containing the range start
+        let mut s_ptr: *const u32 = storage.as_ptr();
         let wrd_to_blk: usize = words_to_block(n_blks, s_blk, ty_wd, s_ptr);
+        s_ptr = s_ptr.offset(wrd_to_blk as isize);
 
         // Prepare return variable
-        let mut output: Vec<$ty> = Vec::with_capacity((n_blks - s_blk + 1) << 7);
+        let mut scratch: [$ty; 128] = [0; 128];
+        let c_ptr: *mut $ty = scratch.as_mut_ptr();
         let mut o_ptr: *mut $ty = output.as_mut_ptr();
 
         // Start block known, decode the range
-        s_ptr = s_ptr.offset(wrd_to_blk as isize);
-
         if s_blk == n_blks {
           // Find the width of the block
           let e_wd: u32 = *s_ptr & E_WIDTH;
@@ -1431,42 +1579,54 @@ macro_rules! access_unsigned {
           if range.start > s_length {
             panic!(format!("range start is {} but length is {}", range.start, s_length))
           }
+          let o_length: usize = s_length - range.start;
+          if output.len() < o_length {
+            panic!(
+              format!("range length is {} but slice length is {}", o_length, output.len())
+            );
+          }
           if range.start == s_length {
-            return Vec::new();
+            return 0;
           }
 
           // Decode the block
-          s_ptr = Monotone::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
+          s_ptr = Monotone::<$ty>::_decode_tail(s_ptr, c_ptr, left, e_wd);
 
           let mut acc: $ty = *(s_ptr as *const $ty);
           for a in 0..(left as isize) {
-            acc = acc.wrapping_add(*o_ptr.offset(a));
-            *o_ptr.offset(a) = acc;
+            acc = acc.wrapping_add(*c_ptr.offset(a));
+            *c_ptr.offset(a) = acc;
           }
 
-          let o_length: usize = s_length - range.start;
-          ptr::copy(o_ptr.offset(lwr as isize), o_ptr, o_length);
-          output.set_len(o_length);
+          ptr::copy_nonoverlapping(c_ptr.offset(lwr as isize), o_ptr, o_length);
 
-          output
+          o_length
         } else {
+          // Checks the length of storage
+          let len_bnd: usize = (n_blks << 7) - range.start;
+          if output.len() < len_bnd {
+            panic!(
+              format!("range length is > {} but slice length is {}", len_bnd, output.len())
+            );
+          }
+
           // Initial block
           let e_wd: u32 = *s_ptr & E_WIDTH;
           s_ptr = s_ptr.offset(1);
 
           // Decode initial block
-          mayda_codec::$dec_simd[e_wd as usize](s_ptr, o_ptr);
-          s_ptr = s_ptr.offset(4 * e_wd as isize);
+          mayda_codec::$dec_simd[e_wd as usize](s_ptr, c_ptr);
+          s_ptr = s_ptr.offset((e_wd << 2) as isize);
 
           let mut acc: $ty = *(s_ptr as *const $ty);
           s_ptr = s_ptr.offset(ty_wrd as isize);
           for a in 0..128 {
-            acc = acc.wrapping_add(*o_ptr.offset(a));
-            *o_ptr.offset(a) = acc;
+            acc = acc.wrapping_add(*c_ptr.offset(a));
+            *c_ptr.offset(a) = acc;
           }
 
           let count: usize = 128 - lwr;
-          ptr::copy(o_ptr.offset(lwr as isize), o_ptr, count);
+          ptr::copy_nonoverlapping(c_ptr.offset(lwr as isize), o_ptr, count);
           o_ptr = o_ptr.offset(count as isize);
 
           // Block size is known for all but the final block
@@ -1477,7 +1637,7 @@ macro_rules! access_unsigned {
 
             // Decode the block
             mayda_codec::$dec_simd[e_wd as usize](s_ptr, o_ptr);
-            s_ptr = s_ptr.offset(4 * e_wd as isize);
+            s_ptr = s_ptr.offset((e_wd << 2) as isize);
 
             let mut acc: $ty = *(s_ptr as *const $ty);
             s_ptr = s_ptr.offset(ty_wrd as isize);
@@ -1495,27 +1655,25 @@ macro_rules! access_unsigned {
           s_ptr = s_ptr.offset(1);
 
           // Checks the length of storage
-          let s_length: usize = (n_blks << 7) + left;
-          if range.start > s_length {
-            panic!(format!("range start is {} but length is {}", range.start, s_length))
-          }
-          if range.start == s_length {
-            return Vec::new();
+          let o_length: usize = (n_blks << 7) + left - range.start;
+          if output.len() < o_length {
+            panic!(
+              format!("range length is {} but slice length is {}", o_length, output.len())
+            );
           }
 
           // Decode final block
-          s_ptr = Monotone::<$ty>::_decode_tail(s_ptr, o_ptr, left, e_wd);
+          s_ptr = Monotone::<$ty>::_decode_tail(s_ptr, c_ptr, left, e_wd);
 
           let mut acc: $ty = *(s_ptr as *const $ty);
           for a in 0..(left as isize) {
-            acc = acc.wrapping_add(*o_ptr.offset(a));
-            *o_ptr.offset(a) = acc;
+            acc = acc.wrapping_add(*c_ptr.offset(a));
+            *c_ptr.offset(a) = acc;
           }
 
-          let o_length: usize = s_length - range.start;
-          output.set_len(o_length);
+          ptr::copy_nonoverlapping(c_ptr, o_ptr, left);
 
-          output
+          o_length
         }
       }
     }
@@ -1531,24 +1689,26 @@ access_unsigned!{
 
 macro_rules! access_signed {
   ($(($it: ident, $ut: ident))*) => ($(
-    impl AccessPrivate<usize> for Monotone<$it> {
+    impl AccessOne<$it> for Monotone<$it> {
       #[inline]
-      unsafe fn _access(storage: &[u32], index: usize) -> $it {
-        Monotone::<$ut>::_access(storage, index) as $it
+      unsafe fn _access_one(storage: &[u32], index: usize) -> $it {
+        Monotone::<$ut>::_access_one(storage, index) as $it
       }
     }
 
-    impl AccessPrivate<ops::Range<usize>> for Monotone<$it> {
+    impl AccessMany<$it, ops::Range<usize>> for Monotone<$it> {
       #[inline]
-      unsafe fn _access(storage: &[u32], range: ops::Range<usize>) -> Vec<$it> {
-        mem::transmute(Monotone::<$ut>::_access(storage, range))
+      unsafe fn _access_many(storage: &[u32], n_blks: usize,
+                             range: ops::Range<usize>, output: &mut [$it]) -> usize {
+        Monotone::<$ut>::_access_many(storage, n_blks, range, mem::transmute(output))
       }
     }
 
-    impl AccessPrivate<ops::RangeFrom<usize>> for Monotone<$it> {
+    impl AccessMany<$it, ops::RangeFrom<usize>> for Monotone<$it> {
       #[inline]
-      unsafe fn _access(storage: &[u32], range: ops::RangeFrom<usize>) -> Vec<$it> {
-        mem::transmute(Monotone::<$ut>::_access(storage, range))
+      unsafe fn _access_many(storage: &[u32], n_blks: usize,
+                             range: ops::RangeFrom<usize>, output: &mut [$it]) -> usize {
+        Monotone::<$ut>::_access_many(storage, n_blks, range, mem::transmute(output))
       }
     }
   )*)
@@ -1559,6 +1719,12 @@ access_signed!{
   (i16, u16)
   (i32, u32)
   (i64, u64)
+}
+
+#[cfg(target_pointer_width = "16")]
+access_signed!{
+  (usize, u16)
+  (isize, u16)
 }
 
 #[cfg(target_pointer_width = "32")]

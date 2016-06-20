@@ -12,7 +12,7 @@ extern crate num;
 extern crate rand;
 extern crate test;
 
-use mayda::{Access, Encode, Unimodal};
+use mayda::{Access, AccessInto, Encode, Unimodal};
 use num::{Bounded, FromPrimitive, ToPrimitive};
 use rand::distributions::{IndependentSample, Range, Normal};
 use test::Bencher;
@@ -150,22 +150,22 @@ macro_rules! range_bench {
       let mut bin = Unimodal::new();
       let input: Vec<$t> = rand_outliers($mean, $std_dev, $length);
       bin.encode(&input).unwrap();
-      let mut vec = Vec::new();
+      let mut output = vec![0; $upr - $lwr];
       b.iter(|| {
-        vec = bin.access($lwr..$upr);
+        bin.access_into($lwr..$upr, &mut *output);
       });
-      assert_eq!(&input[$lwr..$upr], &vec[..]);
+      assert_eq!(&input[$lwr..$upr], &output[..]);
     }
   )*)
 }
 
 range_bench!{
-  (u8: 128, 16, 1024, 892, 900, r_u8_0_MAX_1024_892_900)
-  (u16: 1024, 32, 1024, 892, 900, r_u16_0_MAX_1024_892_900)
-  (u32: 1024, 32, 1024, 892, 900, r_u32_0_MAX_1024_892_900)
-  (u64: 1024, 32, 1024, 892, 900, r_u64_0_MAX_1024_892_900)
-  (u8: 128, 16, 1024, 892, 900, r_i8_MIN_MAX_1024_892_900)
-  (u16: 1024, 32, 1024, 892, 900, r_i16_MIN_MAX_1024_892_900)
-  (u32: 1024, 32, 1024, 892, 900, r_i32_MIN_MAX_1024_892_900)
-  (u64: 1024, 32, 1024, 892, 900, r_i64_MIN_MAX_1024_892_900)
+  (u8: 128, 16, 1024, 892, 900, r_u8_128_16_1024_892_900)
+  (u16: 1024, 32, 1024, 892, 900, r_u16_1024_32_1024_892_900)
+  (u32: 1024, 32, 1024, 892, 900, r_u32_1024_32_1024_892_900)
+  (u64: 1024, 32, 1024, 892, 900, r_u64_1024_32_1024_892_900)
+  (i8: 0, 16, 1024, 892, 900, r_i8_0_16_1024_892_900)
+  (i16: 0, 32, 1024, 892, 900, r_i16_0_32_1024_892_900)
+  (i32: 0, 32, 1024, 892, 900, r_i32_0_32_1024_892_900)
+  (i64: 0, 32, 1024, 892, 900, r_i64_0_32_1024_892_900)
 }

@@ -13,7 +13,7 @@ extern crate mayda;
 extern crate num;
 extern crate rand;
 
-use mayda::{Access, Encode, Unimodal};
+use mayda::{Access, AccessInto, Encode, Unimodal};
 use num::{Bounded, FromPrimitive, ToPrimitive};
 use rand::distributions::{IndependentSample, Range, Normal};
 
@@ -632,4 +632,67 @@ range_inclusive!{
   (i32: 0, 32, 1024, 15, ri_i32_0_32_1024_15)
   (i64: 0, 32, 1024, 15, ri_i64_0_32_1024_15)
   (isize: 0, 32, 1024, 15, ri_isize_0_32_1024_15)
+}
+
+macro_rules! range_into {
+  ($(($t: ty: $mean: expr, $std_dev: expr, $length: expr, $width: expr, $name: ident))*) => ($(
+    #[test]
+    fn $name() {
+      let mut bin = Unimodal::new();
+      let input: Vec<$t> = rand_outliers($mean, $std_dev, $length);
+      println!("{:?}", input);
+      bin.encode(&input).unwrap();
+      for a in bin.storage() { println!("{:032b}", a); }
+      let mut output = vec![0; $width + 1];
+      for a in 0..($length - $width + 1) {
+        let width = bin.access_into(a..($width + a), &mut *output);
+        println!("{:?} {:?}", &input[a..($width + a)], &output[..$width]);
+        assert_eq!($width, width);
+        assert_eq!(&input[a..($width + a)], &output[..$width]);
+      }
+    }
+  )*)
+}
+
+range_into!{
+  (u8: 128, 16, 513, 15, ri_u8_128_16_513_15)
+  (u16: 1024, 32, 513, 15, ri_u16_128_32_513_15)
+  (u32: 1024, 32, 513, 15, ri_u32_128_32_513_15)
+  (u64: 1024, 32, 513, 15, ri_u64_128_32_513_15)
+  (i8: 0, 16, 513, 15, ri_i8_0_16_513_15)
+  (i16: 0, 32, 513, 15, ri_i16_0_32_513_15)
+  (i32: 0, 32, 513, 15, ri_i32_0_32_513_15)
+  (i64: 0, 32, 513, 15, ri_i64_0_32_513_15)
+}
+
+macro_rules! range_from_into {
+  ($(($t: ty: $mean: expr, $std_dev: expr, $length: expr, $name: ident))*) => ($(
+    #[test]
+    fn $name() {
+      let mut bin = Unimodal::new();
+      let input: Vec<$t> = rand_outliers($mean, $std_dev, $length);
+      println!("{:?}", input);
+      bin.encode(&input).unwrap();
+      for a in bin.storage() { println!("{:032b}", a); }
+      let mut output = vec![0; $length + 1];
+      for a in 0..$length {
+        let width = bin.access_into(a.., &mut *output);
+        println!("{:?} {:?}", &input[a..], &output[..width]);
+        assert_eq!(input[a..], output[..width]);
+      }
+    }
+  )*)
+}
+
+range_from_into!{
+  (u8: 128, 16, 1024, rfi_u8_128_16_1024)
+  (u16: 1024, 32, 1024, rfi_u16_1024_32_1024)
+  (u32: 1024, 32, 1024, rfi_u32_1024_32_1024)
+  (u64: 1024, 32, 1024, rfi_u64_1024_32_1024)
+  (usize: 1024, 32, 1024, rfi_usize_1024_32_1024)
+  (i8: 0, 16, 1024, rfi_i8_0_16_1024)
+  (i16: 0, 32, 1024, rfi_i16_0_32_1024)
+  (i32: 0, 32, 1024, rfi_i32_0_32_1024)
+  (i64: 0, 32, 1024, rfi_i64_0_32_1024)
+  (isize: 0, 32, 1024, rfi_isize_0_32_1024)
 }

@@ -151,4 +151,4 @@ pub use self::error::Error;
 pub use self::monotone::Monotone;
 pub use self::uniform::Uniform;
 pub use self::unimodal::Unimodal;
-pub use self::utility::{Access, Encode};
+pub use self::utility::{Access, AccessInto, Encode};

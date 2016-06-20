@@ -12,7 +12,7 @@
 extern crate mayda;
 extern crate quickcheck;
 
-use mayda::{Access, Encode, Monotone, Uniform, Unimodal};
+use mayda::{Access, AccessInto, Encode, Monotone, Uniform, Unimodal};
 
 macro_rules! encode_decode {
   ($(($mayda_ty: ident: $int_ty: ty, $name: ident))*) => ($(
@@ -358,6 +358,66 @@ macro_rules! range_inclusive {
 }
 
 range_inclusive!{
+  (Monotone: u8, rc_mon_u8)
+  (Monotone: u16, rc_mon_u16)
+  (Monotone: u32, rc_mon_u32)
+  (Monotone: u64, rc_mon_u64)
+  (Monotone: usize, rc_mon_usize)
+  (Monotone: i8, rc_mon_i8)
+  (Monotone: i16, rc_mon_i16)
+  (Monotone: i32, rc_mon_i32)
+  (Monotone: i64, rc_mon_i64)
+  (Monotone: isize, rc_mon_isize)
+}
+
+range_inclusive!{
+  (Uniform: u8, rc_unf_u8)
+  (Uniform: u16, rc_unf_u16)
+  (Uniform: u32, rc_unf_u32)
+  (Uniform: u64, rc_unf_u64)
+  (Uniform: usize, rc_unf_usize)
+  (Uniform: i8, rc_unf_i8)
+  (Uniform: i16, rc_unf_i16)
+  (Uniform: i32, rc_unf_i32)
+  (Uniform: i64, rc_unf_i64)
+  (Uniform: isize, rc_unf_isize)
+}
+
+range_inclusive!{
+  (Unimodal: u8, rc_umd_u8)
+  (Unimodal: u16, rc_umd_u16)
+  (Unimodal: u32, rc_umd_u32)
+  (Unimodal: u64, rc_umd_u64)
+  (Unimodal: usize, rc_umd_usize)
+  (Unimodal: i8, rc_umd_i8)
+  (Unimodal: i16, rc_umd_i16)
+  (Unimodal: i32, rc_umd_i32)
+  (Unimodal: i64, rc_umd_i64)
+  (Unimodal: isize, rc_umd_isize)
+}
+
+macro_rules! range_into {
+  ($(($mayda_ty: ident: $int_ty: ty, $name: ident))*) => ($(
+    #[quickcheck]
+    fn $name(input: Vec<$int_ty>, lwr: usize, upr: usize) -> bool {
+      let mut bin = $mayda_ty::new();
+      bin.encode(&input).unwrap();
+      if input.len() > 0 {
+        let mut lwr = lwr % input.len();
+        let mut upr = upr % (input.len() + 1);
+        if lwr > upr { std::mem::swap(&mut lwr, &mut upr); }
+        let mut output: Vec<$int_ty> = vec![0; upr - lwr];
+        bin.access_into(lwr..upr, &mut *output);
+        if input[lwr..upr] != output[..] {
+          return false
+        }
+      }
+      true
+    }
+  )*)
+}
+
+range_into!{
   (Monotone: u8, ri_mon_u8)
   (Monotone: u16, ri_mon_u16)
   (Monotone: u32, ri_mon_u32)
@@ -370,7 +430,7 @@ range_inclusive!{
   (Monotone: isize, ri_mon_isize)
 }
 
-range_inclusive!{
+range_into!{
   (Uniform: u8, ri_unf_u8)
   (Uniform: u16, ri_unf_u16)
   (Uniform: u32, ri_unf_u32)
@@ -383,7 +443,7 @@ range_inclusive!{
   (Uniform: isize, ri_unf_isize)
 }
 
-range_inclusive!{
+range_into!{
   (Unimodal: u8, ri_umd_u8)
   (Unimodal: u16, ri_umd_u16)
   (Unimodal: u32, ri_umd_u32)
