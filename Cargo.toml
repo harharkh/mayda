@@ -1,6 +1,6 @@
 [package]
 name = "mayda"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Jeremy Mason <jkylemason@gmail.com>"]
 license = "MIT/Apache-2.0"
 description = "Compression of integer arrays, favoring decompression speed."
