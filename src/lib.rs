@@ -24,7 +24,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! mayda = "^0.1"
+//! mayda = "^0.2"
 //! ```
 //!
 //! and this to your crate root:
@@ -61,8 +61,8 @@
 //!
 //! # Example: indexing
 //! 
-//! Use the `Access` trait to index the compressed array. This is similar to
-//! `Index`, but returns a vector instead of a slice.
+//! Use the `Access` or `AccessInto` traits to index the compressed array. This
+//! is similar to `Index`, but returns a vector instead of a slice.
 //!
 //! ```rust
 //! use mayda::{Uniform, Encode, Access};

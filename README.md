@@ -31,7 +31,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-mayda = "^0.1"
+mayda = "^0.2"
 ```
 
 and this to your crate root:
@@ -71,8 +71,8 @@ fn main() {
 
 ### Example: indexing
 
-Use the `Access` trait to index the compressed array. This is similar to `Index`,
-but returns a vector instead of a slice.
+Use the `Access` and `AccessInto` traits to index the compressed array. This is
+similar to `Index`, but returns a vector instead of a slice.
 
 ```rust
 extern crate mayda;

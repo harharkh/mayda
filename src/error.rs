@@ -6,7 +6,7 @@
 // copied, modified, or distributed except according to those terms.
 
 //! Defines the `mayda::Error` type. Currently only used for the return types of
-//! functions defined in the `Encodable` trait, but intended to allow for more
+//! functions defined in the `Encode` trait, but intended to allow for more
 //! complex error handling in the future.
 
 use std::error;
