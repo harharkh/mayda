@@ -55,7 +55,7 @@ const I_WIDTH: u32 = 0xe0000000;
 
 /// The type of a unimodal encoded integer array. Designed for moderate
 /// compression and efficient decoding through the `Encode` trait, and
-/// efficient random access through the `Access` trait.
+/// efficient random access through the `Access` and `AccessInto` traits.
 ///
 /// Support is provided for arrays with as many as (2^37 - 2^7) entries, or
 /// about 512 GiB of `u32`s. If your application requires more than that, you
