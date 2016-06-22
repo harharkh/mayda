@@ -13,8 +13,9 @@ This crate provides three variations on a single compression algorithm. The
 [`Uniform`] type can decompress around six billion `u32`s per second, or 24
 GiB/s of decompressed integers, on a 2.6 GHz Intel Core i7-6700HQ processor
 (see below for specifics). The [`Monotone`] and [`Unimodal`] types decompress
-at around half the speed, but can have much better compression ratios depending
-on the distribution of the integers.
+at a little less than half the speed, but can have much better compression
+ratios depending on the distribution of the integers. Overall performance is
+comparable to the fastest (known) libraries in any language.
 
 Compiling `mayda` requires the **nightly** compiler and CPU support for the
 SSE2 instruction set (any Intel or AMD processor manufactured after 2003). The
