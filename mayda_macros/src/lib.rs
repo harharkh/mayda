@@ -54,9 +54,7 @@
 //! and decode the 24 least significant bits of 8 u32 integers are
 //!
 //! ```
-//! unsafe fn encode_u32_24_8(i_ptr: *const u32, s_ptr: *mut u32) {
-//!     let mut i_ptr = i_ptr;
-//!     let mut s_ptr = s_ptr;
+//! unsafe fn encode_u32_24_8(mut i_ptr: *const u32, mut s_ptr: *mut u32) {
 //!     let mut out = *i_ptr as u32;
 //!     i_ptr = i_ptr.offset(1);
 //!     out |= (*i_ptr as u32) << 24usize;
@@ -89,9 +87,7 @@
 //!     *s_ptr = out;
 //! }
 //!
-//! unsafe fn decode_u32_24_8(s_ptr: *const u32, o_ptr: *mut u32) {
-//!     let mut s_ptr = s_ptr;
-//!     let mut o_ptr = o_ptr;
+//! unsafe fn decode_u32_24_8(mut s_ptr: *const u32, mut o_ptr: *mut u32) {
 //!     let mask: u32 = !0 >> 8usize;
 //!     let mut out;
 //!     out = *s_ptr as u32;
@@ -198,8 +194,6 @@ fn encode_expand(cx: &mut ExtCtxt,
 
       // Function definition constructed here
       let mut tokens = quote_tokens!(cx,
-        let mut i_ptr = i_ptr;
-        let mut s_ptr = s_ptr;
         let mut out =
       );
 
@@ -262,7 +256,7 @@ fn encode_expand(cx: &mut ExtCtxt,
       // Function definition pushed to items
       items.push(
         quote_item!(cx,
-          unsafe fn $ident(i_ptr: *const $ut, s_ptr: *mut u32) {
+          unsafe fn $ident(mut i_ptr: *const $ut, mut s_ptr: *mut u32) {
             $tokens
           }
         ).unwrap()
@@ -338,29 +332,19 @@ fn decode_expand(cx: &mut ExtCtxt,
       }
 
       // Function definition constructed here
+      let mask_sft = width - wd;
       let mut tokens = {
-        // Handles unused mut warning
-        if wd * ln > 32 {
+        if mask_sft > 0 && wd != 32 {
           quote_tokens!(cx,
-            let mut s_ptr = s_ptr;
-            let mut o_ptr = o_ptr;
+            let mask: $ut = !0 >> $mask_sft;
+            let mut out;
           )
         } else {
           quote_tokens!(cx,
-            let mut o_ptr = o_ptr;
+            let mut out;
           )
         }
       };
-      // Handles unused variable warnings
-      let mask_sft = width - wd;
-      if mask_sft > 0 && wd != 32 {
-        tokens = quote_tokens!(cx, $tokens
-          let mask: $ut = !0 >> $mask_sft;
-        );
-      }
-      tokens = quote_tokens!(cx, $tokens
-        let mut out;
-      );
 
       // For every integer to be decoded...
       let mut s_bits: usize = 32;
@@ -427,7 +411,7 @@ fn decode_expand(cx: &mut ExtCtxt,
       // Function definition pushed to items
       items.push(
         quote_item!(cx,
-          unsafe fn $ident(s_ptr: *const u32, o_ptr: *mut $ut) {
+          unsafe fn $ident(mut s_ptr: *const u32, mut o_ptr: *mut $ut) {
             $tokens
           }
         ).unwrap()

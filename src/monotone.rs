@@ -522,8 +522,8 @@ macro_rules! encodable_unsigned {
         length
       }
 
-      unsafe fn _encode_tail(c_ptr: *const $ty,
-                             s_ptr: *mut u32,
+      unsafe fn _encode_tail(mut c_ptr: *const $ty,
+                             mut s_ptr: *mut u32,
                              e_cnt: usize,
                              e_wd: u32) -> *mut u32 {
         // Encode a run of 128 integers and return
@@ -531,9 +531,6 @@ macro_rules! encodable_unsigned {
           mayda_codec::$enc_simd[e_wd as usize](c_ptr, s_ptr);
           return s_ptr.offset(4 * e_wd as isize)
         }
-
-        let mut c_ptr: *const $ty = c_ptr;
-        let mut s_ptr: *mut u32 = s_ptr;
 
         // Encode a short run and return
         if e_cnt < $step {
@@ -544,7 +541,7 @@ macro_rules! encodable_unsigned {
             i_bits = e_wd;
 
             // Encode in the available space
-            let lsft = 32 - s_bits;
+            let lsft: u32 = 32 - s_bits;
             *s_ptr |= (*c_ptr as u32) << lsft;
 
             // While the available space is not enough...
@@ -596,7 +593,7 @@ macro_rules! encodable_unsigned {
             i_bits = e_wd;
 
             // Encode in the available space
-            let lsft = 32 - s_bits;
+            let lsft: u32 = 32 - s_bits;
             *s_ptr |= (*c_ptr as u32) << lsft;
 
             // While the available space is not enough...
@@ -621,8 +618,8 @@ macro_rules! encodable_unsigned {
         if s_bits < 32 { s_ptr.offset(1) } else { s_ptr }
       }
 
-      unsafe fn _decode_tail(s_ptr: *const u32,
-                             o_ptr: *mut $ty,
+      unsafe fn _decode_tail(mut s_ptr: *const u32,
+                             mut o_ptr: *mut $ty,
                              e_cnt: usize,
                              e_wd: u32) -> *const u32 {
         // Decode a run of 128 integers and return
@@ -630,9 +627,6 @@ macro_rules! encodable_unsigned {
           mayda_codec::$dec_simd[e_wd as usize](s_ptr, o_ptr);
           return s_ptr.offset(4 * e_wd as isize)
         }
-
-        let mut s_ptr: *const u32 = s_ptr;
-        let mut o_ptr: *mut $ty = o_ptr;
 
         // Decode a short run and return
         if e_cnt < $step {

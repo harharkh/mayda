@@ -13,6 +13,8 @@
 #![feature(plugin)]
 #![plugin(mayda_macros)]
 
+#![allow(unused_mut)]
+
 extern crate simd;
 
 macro_rules! codec {
