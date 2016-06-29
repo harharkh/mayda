@@ -12,9 +12,9 @@
 //! possible.
 //! 
 //! This crate provides three variations on a single compression algorithm. The
-//! [`Uniform`] type can decompress around six billion `u32`s per second, or 24
+//! `Uniform` type can decompress around six billion `u32`s per second, or 24
 //! GiB/s of decompressed integers, on a 2.6 GHz Intel Core i7-6700HQ processor
-//! (see below for specifics). The [`Monotone`] and [`Unimodal`] types decompress
+//! (see below for specifics). The `Monotone` and `Unimodal` types decompress
 //! at a little less than half the speed, but can have much better compression
 //! ratios depending on the distribution of the integers. Overall performance is
 //! comparable to the fastest (known) libraries in any language.
