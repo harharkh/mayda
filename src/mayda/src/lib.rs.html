@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="Source to the Rust file `src/lib.rs`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang">
+
+    <title>lib.rs.html -- source</title>
+
+    <link rel="stylesheet" type="text/css" href="../../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content source"><pre class="line-numbers"><span id="1">  1</span>
+<span id="2">  2</span>
+<span id="3">  3</span>
+<span id="4">  4</span>
+<span id="5">  5</span>
+<span id="6">  6</span>
+<span id="7">  7</span>
+<span id="8">  8</span>
+<span id="9">  9</span>
+<span id="10"> 10</span>
+<span id="11"> 11</span>
+<span id="12"> 12</span>
+<span id="13"> 13</span>
+<span id="14"> 14</span>
+<span id="15"> 15</span>
+<span id="16"> 16</span>
+<span id="17"> 17</span>
+<span id="18"> 18</span>
+<span id="19"> 19</span>
+<span id="20"> 20</span>
+<span id="21"> 21</span>
+<span id="22"> 22</span>
+<span id="23"> 23</span>
+<span id="24"> 24</span>
+<span id="25"> 25</span>
+<span id="26"> 26</span>
+<span id="27"> 27</span>
+<span id="28"> 28</span>
+<span id="29"> 29</span>
+<span id="30"> 30</span>
+<span id="31"> 31</span>
+<span id="32"> 32</span>
+<span id="33"> 33</span>
+<span id="34"> 34</span>
+<span id="35"> 35</span>
+<span id="36"> 36</span>
+<span id="37"> 37</span>
+<span id="38"> 38</span>
+<span id="39"> 39</span>
+<span id="40"> 40</span>
+<span id="41"> 41</span>
+<span id="42"> 42</span>
+<span id="43"> 43</span>
+<span id="44"> 44</span>
+<span id="45"> 45</span>
+<span id="46"> 46</span>
+<span id="47"> 47</span>
+<span id="48"> 48</span>
+<span id="49"> 49</span>
+<span id="50"> 50</span>
+<span id="51"> 51</span>
+<span id="52"> 52</span>
+<span id="53"> 53</span>
+<span id="54"> 54</span>
+<span id="55"> 55</span>
+<span id="56"> 56</span>
+<span id="57"> 57</span>
+<span id="58"> 58</span>
+<span id="59"> 59</span>
+<span id="60"> 60</span>
+<span id="61"> 61</span>
+<span id="62"> 62</span>
+<span id="63"> 63</span>
+<span id="64"> 64</span>
+<span id="65"> 65</span>
+<span id="66"> 66</span>
+<span id="67"> 67</span>
+<span id="68"> 68</span>
+<span id="69"> 69</span>
+<span id="70"> 70</span>
+<span id="71"> 71</span>
+<span id="72"> 72</span>
+<span id="73"> 73</span>
+<span id="74"> 74</span>
+<span id="75"> 75</span>
+<span id="76"> 76</span>
+<span id="77"> 77</span>
+<span id="78"> 78</span>
+<span id="79"> 79</span>
+<span id="80"> 80</span>
+<span id="81"> 81</span>
+<span id="82"> 82</span>
+<span id="83"> 83</span>
+<span id="84"> 84</span>
+<span id="85"> 85</span>
+<span id="86"> 86</span>
+<span id="87"> 87</span>
+<span id="88"> 88</span>
+<span id="89"> 89</span>
+<span id="90"> 90</span>
+<span id="91"> 91</span>
+<span id="92"> 92</span>
+<span id="93"> 93</span>
+<span id="94"> 94</span>
+<span id="95"> 95</span>
+<span id="96"> 96</span>
+<span id="97"> 97</span>
+<span id="98"> 98</span>
+<span id="99"> 99</span>
+<span id="100">100</span>
+<span id="101">101</span>
+<span id="102">102</span>
+<span id="103">103</span>
+<span id="104">104</span>
+<span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
+<span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+<span id="126">126</span>
+<span id="127">127</span>
+<span id="128">128</span>
+<span id="129">129</span>
+<span id="130">130</span>
+<span id="131">131</span>
+<span id="132">132</span>
+<span id="133">133</span>
+<span id="134">134</span>
+<span id="135">135</span>
+<span id="136">136</span>
+<span id="137">137</span>
+<span id="138">138</span>
+<span id="139">139</span>
+<span id="140">140</span>
+<span id="141">141</span>
+<span id="142">142</span>
+<span id="143">143</span>
+<span id="144">144</span>
+<span id="145">145</span>
+<span id="146">146</span>
+<span id="147">147</span>
+<span id="148">148</span>
+<span id="149">149</span>
+<span id="150">150</span>
+<span id="151">151</span>
+<span id="152">152</span>
+<span id="153">153</span>
+<span id="154">154</span>
+<span id="155">155</span>
+<span id="156">156</span>
+<span id="157">157</span>
+<span id="158">158</span>
+<span id="159">159</span>
+<span id="160">160</span>
+<span id="161">161</span>
+<span id="162">162</span>
+</pre><pre class='rust '>
+<span class='comment'>// Copyright 2016 Jeremy Mason</span>
+<span class='comment'>//</span>
+<span class='comment'>// Licensed under the Apache License, Version 2.0, &lt;LICENSE-APACHE or</span>
+<span class='comment'>// http://apache.org/licenses/LICENSE-2.0&gt; or the MIT license &lt;LICENSE-MIT or</span>
+<span class='comment'>// http://opensource.org/licenses/MIT&gt;, at your option. This file may not be</span>
+<span class='comment'>// copied, modified, or distributed except according to those terms.</span>
+
+<span class='doccomment'>//! `mayda` is a library to compress integer arrays (all primitive integer</span>
+<span class='doccomment'>//! types are supported). The design favors decompression speed and the ability</span>
+<span class='doccomment'>//! to index the compressed array over the compression ratio, on the principle</span>
+<span class='doccomment'>//! that the runtime penalty for using compressed arrays should be as small as</span>
+<span class='doccomment'>//! possible.</span>
+<span class='doccomment'>//! </span>
+<span class='doccomment'>//! This crate provides three variations on a single compression algorithm. The</span>
+<span class='doccomment'>//! `Uniform` type can decompress around six billion `u32`s per second, or 24</span>
+<span class='doccomment'>//! GiB/s of decompressed integers, on a 2.6 GHz Intel Core i7-6700HQ processor</span>
+<span class='doccomment'>//! (see below for specifics). The `Monotone` and `Unimodal` types decompress</span>
+<span class='doccomment'>//! at a little less than half the speed, but can have much better compression</span>
+<span class='doccomment'>//! ratios depending on the distribution of the integers. Overall performance is</span>
+<span class='doccomment'>//! comparable to the fastest (known) libraries in any language.</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! # Usage</span>
+<span class='doccomment'>//! </span>
+<span class='doccomment'>//! Add this to your `Cargo.toml`:</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! ```toml</span>
+<span class='doccomment'>//! [dependencies]</span>
+<span class='doccomment'>//! mayda = &quot;^0.2&quot;</span>
+<span class='doccomment'>//! ```</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! and this to your crate root:</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! ```rust</span>
+<span class='doccomment'>//! extern crate mayda;</span>
+<span class='doccomment'>//! ```</span>
+<span class='doccomment'>//! </span>
+<span class='doccomment'>//! # Example: encoding and decoding</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! The `Uniform` struct is recommended for general purpose integer compression.</span>
+<span class='doccomment'>//! Use the `Encode` trait to encode and decode the array.</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! ```rust</span>
+<span class='doccomment'>//! use std::mem;</span>
+<span class='doccomment'>//! use mayda::{Uniform, Encode};</span>
+<span class='doccomment'>//! </span>
+<span class='doccomment'>//! // Integers in some interval of length 255, require one byte per integer</span>
+<span class='doccomment'>//! let input: Vec&lt;u32&gt; = (0..128).map(|x| (x * 73) % 181 + 307).collect();</span>
+<span class='doccomment'>//! </span>
+<span class='doccomment'>//! let mut uniform = Uniform::new();</span>
+<span class='doccomment'>//! uniform.encode(&amp;input).unwrap();</span>
+<span class='doccomment'>//! </span>
+<span class='doccomment'>//! let i_bytes = std::mem::size_of_val(input.as_slice());</span>
+<span class='doccomment'>//! let u_bytes = std::mem::size_of_val(uniform.storage());</span>
+<span class='doccomment'>//! </span>
+<span class='doccomment'>//! // 128 bytes for encoded entries, 12 bytes of overhead</span>
+<span class='doccomment'>//! assert_eq!(i_bytes, 512);</span>
+<span class='doccomment'>//! assert_eq!(u_bytes, 140);</span>
+<span class='doccomment'>//! </span>
+<span class='doccomment'>//! let output: Vec&lt;u32&gt; = uniform.decode();</span>
+<span class='doccomment'>//! assert_eq!(input, output);</span>
+<span class='doccomment'>//! ```</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! # Example: indexing</span>
+<span class='doccomment'>//! </span>
+<span class='doccomment'>//! Use the `Access` or `AccessInto` traits to index the compressed array. This</span>
+<span class='doccomment'>//! is similar to `Index`, but returns a vector instead of a slice.</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! ```rust</span>
+<span class='doccomment'>//! use mayda::{Uniform, Encode, Access};</span>
+<span class='doccomment'>//! </span>
+<span class='doccomment'>//! // All primitive integer types supported</span>
+<span class='doccomment'>//! let input: Vec&lt;i16&gt; = (-64..64).collect();</span>
+<span class='doccomment'>//! </span>
+<span class='doccomment'>//! let mut uniform = Uniform::new();</span>
+<span class='doccomment'>//! uniform.encode(&amp;input).unwrap();</span>
+<span class='doccomment'>//! </span>
+<span class='doccomment'>//! let val: i16 = uniform.access(64);</span>
+<span class='doccomment'>//! assert_eq!(val, 0);</span>
+<span class='doccomment'>//! </span>
+<span class='doccomment'>//! // Vector is returned to give ownership to the caller</span>
+<span class='doccomment'>//! let range: Vec&lt;i16&gt; = uniform.access(..10);</span>
+<span class='doccomment'>//! assert_eq!(range, (-64..-54).collect::&lt;Vec&lt;_&gt;&gt;());</span>
+<span class='doccomment'>//! ```</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! # Algorithm</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! The compression algorithm relies on the observation that for many integer</span>
+<span class='doccomment'>//! arrays, the probability distribution of a block of 128 entries is not</span>
+<span class='doccomment'>//! uniform over all values that can be represented by the integer type. For</span>
+<span class='doccomment'>//! example, an array of indices into a second array with 256 entries has</span>
+<span class='doccomment'>//! entries that are bounded below by 0 and above by 255. This requires only</span>
+<span class='doccomment'>//! eight bits per entry, rather than the 32 or 64 generally set aside for a</span>
+<span class='doccomment'>//! usize index. The basic idea of the compression algorithm is to represent</span>
+<span class='doccomment'>//! all of the entries in a block with a single minimum necessary bit width.</span>
+<span class='doccomment'>//! This allows SIMD operations and manual loop unrolling to avoid branches to</span>
+<span class='doccomment'>//! be used to accelerate encoding and decoding.</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! This approach does not perform well for probability distributions with</span>
+<span class='doccomment'>//! outliers though, or for situations where the median value is nonzero. This</span>
+<span class='doccomment'>//! crate provides three types that handle this situation by applying different</span>
+<span class='doccomment'>//! initial transformations to the input integer array.</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! The `Uniform` type targets encoding and decoding speed. The only</span>
+<span class='doccomment'>//! transformation is to subtract the minimum value from the entries, with the</span>
+<span class='doccomment'>//! result that the compression depends only on the difference between the</span>
+<span class='doccomment'>//! largest and smallest entries.</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! The `Monotone` type is specifically intended for arrays with monotone</span>
+<span class='doccomment'>//! increasing entries. A blocks of entries is transformed into an offset and</span>
+<span class='doccomment'>//! an array of differences of successive entries, and the array of differences</span>
+<span class='doccomment'>//! is encoded by the approach above. The compression depends only on the </span>
+<span class='doccomment'>//! largest entry in the difference array.</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! The `Unimodal` type performs the most extensive transformations and offers</span>
+<span class='doccomment'>//! the most robust compression. The median value is subtracted from the</span>
+<span class='doccomment'>//! entries, the entries are mapped to the unsigned integers by the zig-zag</span>
+<span class='doccomment'>//! encoding, and the most significant bits of any outliers are removed and</span>
+<span class='doccomment'>//! stored separately. The result is that the compression effectively depends</span>
+<span class='doccomment'>//! only on the standard deviation of the probability distribution of the block</span>
+<span class='doccomment'>//! entries.</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! # Indexing</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! Indexing an object of the `Uniform`, `Monotone` or `Unimodal` types is not</span>
+<span class='doccomment'>//! a simple pointer offset. Part of the header encodes the relative offsets to</span>
+<span class='doccomment'>//! every block in a compressed form, with the result that random access via</span>
+<span class='doccomment'>//! the `Access` trait is an `O(log(idx))` operation, where `idx` is the value</span>
+<span class='doccomment'>//! of the index (not the length of the array). The overhead of this part of</span>
+<span class='doccomment'>//! the header is around a tenth of a bit per encoded integer.</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! If you need to access several nearby entries, consider accessing the range</span>
+<span class='doccomment'>//! and indexing the returned vector for performance.</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! # Safety</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! As a general rule, you **should not** decode or access objects of the</span>
+<span class='doccomment'>//! `Uniform`, `Monotone` or `Unimodal` types from untrusted sources.</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! `mayda` performs wildly unsafe pointer operations during encoding and</span>
+<span class='doccomment'>//! decoding. Changing the header information with `mut_storage` can cause data</span>
+<span class='doccomment'>//! to be written to or read from arbitrary addresses in memory.</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! That said, the situation is the same for any of the data structures in the</span>
+<span class='doccomment'>//! standard library (consider the `set_len` method of a `Vec`).</span>
+
+<span class='attribute'>#<span class='op'>!</span>[<span class='ident'>feature</span>(<span class='ident'>inclusive_range</span>)]</span>
+<span class='attribute'>#<span class='op'>!</span>[<span class='ident'>feature</span>(<span class='ident'>inclusive_range_syntax</span>)]</span>
+<span class='attribute'>#<span class='op'>!</span>[<span class='ident'>feature</span>(<span class='ident'>specialization</span>)]</span>
+
+<span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>mayda_codec</span>;
+
+<span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>error</span>;
+<span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>monotone</span>;
+<span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>uniform</span>;
+<span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>unimodal</span>;
+<span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>utility</span>;
+
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='self'>self</span>::<span class='ident'>error</span>::<span class='ident'>Error</span>;
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='self'>self</span>::<span class='ident'>monotone</span>::<span class='ident'>Monotone</span>;
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='self'>self</span>::<span class='ident'>uniform</span>::<span class='ident'>Uniform</span>;
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='self'>self</span>::<span class='ident'>unimodal</span>::<span class='ident'>Unimodal</span>;
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='self'>self</span>::<span class='ident'>utility</span>::{<span class='ident'>Access</span>, <span class='ident'>AccessInto</span>, <span class='ident'>Encode</span>};
+</pre>
+</section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../../";
+        window.currentCrate = "mayda";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../../../jquery.js"></script>
+    <script src="../../../main.js"></script>
+    
+    <script defer src="../../../search-index.js"></script>
+</body>
+</html>

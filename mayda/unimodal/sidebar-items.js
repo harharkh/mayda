@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["Unimodal","The type of a unimodal encoded integer array. Designed for moderate compression and efficient decoding through the `Encode` trait, and efficient random access through the `Access` and `AccessInto` traits."]]});

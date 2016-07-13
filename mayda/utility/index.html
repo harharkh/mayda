@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `utility` mod in crate `mayda`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, utility">
+
+    <title>mayda::utility - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='../index.html'>mayda</a></p><script>window.sidebarCurrent = {name: 'utility', ty: 'mod', relpath: '../'};</script><script defer src="../sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content mod">
+<h1 class='fqn'><span class='in-band'>Module <a href='../index.html'>mayda</a>::<wbr><a class='mod' href=''>utility</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a id='src-6039' class='srclink' href='../../src/mayda/src/utility.rs.html#8-209' title='goto source code'>[src]</a></span></h1>
+<div class='docblock'><p>Contains constants, enums, traits and functions used by all of the encoding
+types provided by the <code>mayda</code> crate.</p>
+</div><h2 id='traits' class='section-header'><a href="#traits">Traits</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class='trait' href='trait.Access.html'
+                                  title='mayda::utility::Access'>Access</a></td>
+                           <td class='docblock short'>
+                                <p>A trait for indexing an encoded vector. Similar to but less convenient than
+<code>Index</code>. <code>Index::index()</code> returns a reference, but an encoded vector type
+must give ownership of the returned value to the caller.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='trait' href='trait.AccessInto.html'
+                                  title='mayda::utility::AccessInto'>AccessInto</a></td>
+                           <td class='docblock short'>
+                                <p>A trait for indexing a range of an encoded vector. Writes the result into
+the slice provided. Similar to but less convenient than <code>Index</code>.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='trait' href='trait.Bits.html'
+                                  title='mayda::utility::Bits'>Bits</a></td>
+                           <td class='docblock short'>
+                                <p>Indicates that the bitwise representation of the type is known to <code>mayda</code>.
+Intended to be implemented only for the primitive integer types. Mainly
+used as a bound on the <code>Encode</code> trait.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='trait' href='trait.Encode.html'
+                                  title='mayda::utility::Encode'>Encode</a></td>
+                           <td class='docblock short'>
+                                <p>Indicates that the type can be encoded and decoded by <code>mayda</code>.</p>
+                           </td>
+                       </tr></table><h2 id='functions' class='section-header'><a href="#functions">Functions</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class='fn' href='fn.select_m.html'
+                                  title='mayda::utility::select_m'>select_m</a></td>
+                           <td class='docblock short'>
+                                <p>A modified version of the Floyd-Rivest algorithm with fewer comparisions
+and fewer swaps, specialized for the case of slices with length &lt; 500. The
+modifications may not be known in the literature. Intended to be used to
+find the median of a block.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='fn' href='fn.words_for_bits.html'
+                                  title='mayda::utility::words_for_bits'>words_for_bits</a></td>
+                           <td class='docblock short'>
+                                <p>Returns number of words required to store the given number of bits. A word
+is 32 bits long.</p>
+                           </td>
+                       </tr></table></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "mayda";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
+    
+    <script defer src="../../search-index.js"></script>
+</body>
+</html>

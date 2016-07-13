@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["Uniform","The type of a uniform encoded integer array. Designed for moderate compression and efficient decoding through the `Encode` trait, and efficient random access through the `Access` and `AccessInto` traits."]]});

@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["plugin_registrar","Registers the encode and decode syntax expansions."]]});

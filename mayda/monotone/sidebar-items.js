@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["Monotone","The type of a monotone encoded integer array. Designed for moderate compression and efficient decoding through the `Encode` trait, and efficient random access through the `Access` and `AccessInto` traits."]]});
