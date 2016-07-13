@@ -141,6 +141,7 @@ use syntax::ext::base::{DummyResult, ExtCtxt, MacResult, MacEager};
 use syntax::fold::Folder;
 use syntax::parse::{self, token};
 use syntax::print::pprust;
+use syntax::tokenstream;
 use syntax::util::small_vector;
 
 /// Registers the encode and decode syntax expansions.
@@ -157,7 +158,7 @@ pub fn plugin_registrar(reg: &mut Registry) {
 /// `encode_T_a_b` at `ENCODE_T[a - 1][b / c - 1]`.
 fn encode_expand(cx: &mut ExtCtxt,
                  sp: codemap::Span,
-                 tts: &[ast::TokenTree]) -> Box<MacResult + 'static> {
+                 tts: &[tokenstream::TokenTree]) -> Box<MacResult + 'static> {
   // Arguments to the macro invocation
   let (width, step) = {
     match parse(cx, sp, tts) {
@@ -268,9 +269,9 @@ fn encode_expand(cx: &mut ExtCtxt,
   idents.push(token::CloseDelim(token::Bracket));
 
   // idents converted from tokens to TokenTree
-  let ttree: Vec<ast::TokenTree> = idents
+  let ttree: Vec<tokenstream::TokenTree> = idents
     .into_iter()
-    .map(|token| ast::TokenTree::Token(codemap::DUMMY_SP, token))
+    .map(|token| tokenstream::TokenTree::Token(codemap::DUMMY_SP, token))
     .collect();
 
   // ENCODE_T definition pushed to items
@@ -294,7 +295,7 @@ fn encode_expand(cx: &mut ExtCtxt,
 /// `decode_T_a_b` at `DECODE_T[a - 1][b / c - 1]`.
 fn decode_expand(cx: &mut ExtCtxt,
                  sp: codemap::Span,
-                 tts: &[ast::TokenTree]) -> Box<MacResult + 'static> {
+                 tts: &[tokenstream::TokenTree]) -> Box<MacResult + 'static> {
   // Arguments to the macro invocation
   let (width, step) = {
     match parse(cx, sp, tts) {
@@ -423,9 +424,9 @@ fn decode_expand(cx: &mut ExtCtxt,
   idents.push(token::CloseDelim(token::Bracket));
 
   // idents converted from tokens to TokenTree
-  let ttree: Vec<ast::TokenTree> = idents
+  let ttree: Vec<tokenstream::TokenTree> = idents
     .into_iter()
-    .map(|token| ast::TokenTree::Token(codemap::DUMMY_SP, token))
+    .map(|token| tokenstream::TokenTree::Token(codemap::DUMMY_SP, token))
     .collect();
 
   // DECODE_T definition pushed to items
@@ -449,7 +450,7 @@ fn decode_expand(cx: &mut ExtCtxt,
 /// for `encode_simd_T_a` at `ENCODE_SIMD_T[a - 1]`.
 fn encode_simd_expand(cx: &mut ExtCtxt,
                       sp: codemap::Span,
-                      tts: &[ast::TokenTree]) -> Box<MacResult + 'static> {
+                      tts: &[tokenstream::TokenTree]) -> Box<MacResult + 'static> {
   // Arguments to the macro invocation
   let (width, simd) = {
     match parse_simd(cx, sp, tts) {
@@ -581,9 +582,9 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
   idents.push(token::CloseDelim(token::Bracket));
 
   // idents converted from tokens to TokenTree
-  let ttree: Vec<ast::TokenTree> = idents
+  let ttree: Vec<tokenstream::TokenTree> = idents
     .into_iter()
-    .map(|token| ast::TokenTree::Token(codemap::DUMMY_SP, token))
+    .map(|token| tokenstream::TokenTree::Token(codemap::DUMMY_SP, token))
     .collect();
 
   // ENCODE_SIMD_T definition pushed to items
@@ -606,7 +607,7 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
 /// for `decode_simd_T_a` at `DECODE_SIMD_T[a - 1]`.
 fn decode_simd_expand(cx: &mut ExtCtxt,
                       sp: codemap::Span,
-                      tts: &[ast::TokenTree]) -> Box<MacResult + 'static> {
+                      tts: &[tokenstream::TokenTree]) -> Box<MacResult + 'static> {
   // Arguments to the macro invocation
   let (width, simd) = {
     match parse_simd(cx, sp, tts) {
@@ -758,9 +759,9 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
   idents.push(token::CloseDelim(token::Bracket));
 
   // idents converted from tokens to TokenTree
-  let ttree: Vec<ast::TokenTree> = idents
+  let ttree: Vec<tokenstream::TokenTree> = idents
     .into_iter()
-    .map(|token| ast::TokenTree::Token(codemap::DUMMY_SP, token))
+    .map(|token| tokenstream::TokenTree::Token(codemap::DUMMY_SP, token))
     .collect();
 
   // DECODE_SIMD_T definition pushed to items
@@ -782,7 +783,7 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
 /// Generates the `encode_delta_T` and `encode_zz_shift_T` functions.
 fn encode_util_expand(cx: &mut ExtCtxt,
                     sp: codemap::Span,
-                    tts: &[ast::TokenTree]) -> Box<MacResult + 'static> {
+                    tts: &[tokenstream::TokenTree]) -> Box<MacResult + 'static> {
   // Arguments to the macro invocation
   let (width, simd) = {
     match parse_simd(cx, sp, tts) {
@@ -880,7 +881,7 @@ fn encode_util_expand(cx: &mut ExtCtxt,
 /// Parse the two arguments to the encode and decode syntax extensions.
 fn parse(cx: &mut ExtCtxt,
          sp: codemap::Span,
-         tts: &[ast::TokenTree]) -> Option<(usize, usize)> {
+         tts: &[tokenstream::TokenTree]) -> Option<(usize, usize)> {
   let mut parser = cx.new_parser_from_tts(tts);
 
   let entry = cx.expander().fold_expr(parser.parse_expr().unwrap());
@@ -943,7 +944,7 @@ fn parse(cx: &mut ExtCtxt,
 /// syntax extensions.
 fn parse_simd(cx: &mut ExtCtxt,
               sp: codemap::Span,
-              tts: &[ast::TokenTree]) -> Option<(usize, ast::Path)> {
+              tts: &[tokenstream::TokenTree]) -> Option<(usize, ast::Path)> {
   let mut parser = cx.new_parser_from_tts(tts);
 
   let entry = cx.expander().fold_expr(parser.parse_expr().unwrap());
