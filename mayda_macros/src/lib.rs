@@ -127,20 +127,18 @@
 
 #![crate_type="dylib"]
 #![feature(plugin_registrar, rustc_private, quote)]
-#![feature(inclusive_range_syntax, step_by)]
+#![feature(inclusive_range_syntax, step_by,iterator_step_by)]
 
 // Unused import in quote_tokens! macro
 #![allow(unused_imports)]
 
-extern crate syntax_pos;
 extern crate syntax;
 extern crate rustc;
 extern crate rustc_plugin;
 
 use syntax::tokenstream::TokenTree;
 use syntax::ext::build::AstBuilder;  // A trait for expr_usize.
-//use syntax::ext::quote::rt::Span;
-use syntax_pos::{Span, DUMMY_SP};
+use syntax::ext::quote::rt::Span;
 use rustc::hir;
 
 use rustc_plugin::Registry;
@@ -476,7 +474,7 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
     ast::PathSegment {
       identifier: Ident::from_str(&*format!("u{}x{}", width, lanes)),
       parameters: None,
-      span: DUMMY_SP,
+      span: Span::default(),
     }
   );
 
@@ -486,7 +484,7 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
     ast::PathSegment {
       identifier: Ident::from_str("load"),
       parameters: None,
-      span: DUMMY_SP,
+      span: Span::default(),
     }
   );
 
@@ -635,7 +633,7 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
     ast::PathSegment {
       identifier: Ident::from_str(&*format!("u{}x{}", width, lanes)),
       parameters: None,
-      span: DUMMY_SP,
+      span: Span::default(),
     }
   );
 
@@ -645,7 +643,7 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
     ast::PathSegment {
       identifier: Ident::from_str("splat"),
       parameters: None,
-      span: DUMMY_SP,
+      span: Span::default(),
     }
   );
 
@@ -655,7 +653,7 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
     ast::PathSegment {
       identifier: Ident::from_str("load"),
       parameters: None,
-      span: DUMMY_SP,
+      span: Span::default(),
     }
   );
 
@@ -816,7 +814,7 @@ fn encode_util_expand(cx: &mut ExtCtxt,
     ast::PathSegment {
       identifier: Ident::from_str(&*format!("i{}x{}", width, lanes)),
       parameters: None,
-      span: DUMMY_SP,
+      span: Span::default(),
     }
   );
 
@@ -826,7 +824,7 @@ fn encode_util_expand(cx: &mut ExtCtxt,
     ast::PathSegment {
       identifier: Ident::from_str("load"),
       parameters: None,
-      span: DUMMY_SP,
+      span: Span::default(),
     }
   );
 
