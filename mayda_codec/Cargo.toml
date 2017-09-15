@@ -13,5 +13,5 @@ keywords = ["mayda", "compression"]
 name = "mayda_codec"
 
 [dependencies]
-mayda_macros = { path = "../mayda_macros", version = "^0.1" }
+mayda_macros = { path = "../mayda_macros", version = "0.1" }
 simd = "^0.1"
