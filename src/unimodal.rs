@@ -1369,13 +1369,7 @@ impl<B: Bits> Access<ops::RangeInclusive<usize>> for Unimodal<B> {
 
   #[inline]
   fn access(&self, range: ops::RangeInclusive<usize>) -> Vec<B> {
-    match range {
-      ops::RangeInclusive::Empty { .. } => Vec::new(),
-      ops::RangeInclusive::NonEmpty { end, .. } if end == usize::MAX =>
-        panic!("attempted to index slice up to maximum usize"),
-      ops::RangeInclusive::NonEmpty { start, end } =>
-        self.access(start..(end + 1))
-    }
+      self.access(range.start..(range.end + 1))
   }
 }
 
@@ -1445,13 +1439,7 @@ impl<B: Bits> AccessInto<ops::RangeFull, B> for Unimodal<B> {
 impl<B: Bits> AccessInto<ops::RangeInclusive<usize>, B> for Unimodal<B> {
   #[inline]
   fn access_into(&self, range: ops::RangeInclusive<usize>, output: &mut [B]) -> usize {
-    match range {
-      ops::RangeInclusive::Empty { .. } => 0,
-      ops::RangeInclusive::NonEmpty { end, .. } if end == usize::MAX =>
-        panic!("attempted to index slice up to maximum usize"),
-      ops::RangeInclusive::NonEmpty { start, end } =>
-        self.access_into(start..(end + 1), output)
-    }
+        self.access_into(range.start..(range.end + 1), output)
   }
 }
 

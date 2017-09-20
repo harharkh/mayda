@@ -14,10 +14,10 @@ keywords = ["mayda", "compression"]
 name = "mayda"
 
 [dependencies]
-mayda_codec = { path = "mayda_codec", version = "^0.1" }
+mayda_codec = { path = "mayda_codec", version = "0.1" }
 
 [dev-dependencies]
-num = "^0.1"
-quickcheck = "^0.2"
-quickcheck_macros = "^0.2"
+num = "0.1"
+quickcheck = "0.2"
+quickcheck_macros = "0.2"
 rand = "^0.3"

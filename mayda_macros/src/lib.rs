@@ -125,17 +125,24 @@
 //! }
 //! ```
 
+#![crate_type="dylib"]
 #![feature(plugin_registrar, rustc_private, quote)]
-#![feature(inclusive_range_syntax, step_by)]
+#![feature(inclusive_range_syntax, step_by,iterator_step_by)]
 
 // Unused import in quote_tokens! macro
 #![allow(unused_imports)]
 
-extern crate rustc_plugin;
 extern crate syntax;
+extern crate rustc;
+extern crate rustc_plugin;
+
+use syntax::tokenstream::TokenTree;
+use syntax::ext::build::AstBuilder;  // A trait for expr_usize.
+use syntax::ext::quote::rt::Span;
+use rustc::hir;
 
 use rustc_plugin::Registry;
-use syntax::ast;
+use syntax::ast::{self, Ident};
 use syntax::codemap;
 use syntax::ext::base::{DummyResult, ExtCtxt, MacResult, MacEager};
 use syntax::fold::Folder;
@@ -166,7 +173,7 @@ fn encode_expand(cx: &mut ExtCtxt,
       None => return DummyResult::expr(sp)
     }
   };
-  let ut = token::str_to_ident(&*format!("u{}", width));
+  let ut = Ident::from_str(&*format!("u{}", width));
   assert_eq!(32 % step, 0);
   let lengths: Vec<usize> = (step..33).step_by(step).collect();
 
@@ -179,7 +186,7 @@ fn encode_expand(cx: &mut ExtCtxt,
     for &ln in &lengths {
       // Name for the function interned
       let name = format!("encode_{}_{}_{}", ut, wd, ln);
-      let ident = token::str_to_ident(&*name);
+      let ident = Ident::from_str(&*name);
       idents.push(token::Ident(ident));
       idents.push(token::Comma);
 
@@ -276,7 +283,7 @@ fn encode_expand(cx: &mut ExtCtxt,
 
   // ENCODE_T definition pushed to items
   let name = format!("encode_{}", ut).to_uppercase();
-  let ident = token::str_to_ident(&*name);
+  let ident = Ident::from_str(&*name);
   let len1 = lengths.len();
   let len2 = width + 1;
   items.push(
@@ -284,7 +291,7 @@ fn encode_expand(cx: &mut ExtCtxt,
       pub const $ident: [[unsafe fn(*const $ut, *mut u32); $len1]; $len2] = $ttree;
     ).unwrap()
   );
-  
+
   // DEBUGGING
   // for item in &items { println!("{}", pprust::item_to_string(item)); }
 
@@ -303,7 +310,7 @@ fn decode_expand(cx: &mut ExtCtxt,
       None => return DummyResult::expr(sp)
     }
   };
-  let ut = token::str_to_ident(&*format!("u{}", width));
+  let ut = Ident::from_str(&*format!("u{}", width));
   assert_eq!(32 % step, 0);
   let lengths: Vec<usize> = (step..33).step_by(step).collect();
 
@@ -316,7 +323,7 @@ fn decode_expand(cx: &mut ExtCtxt,
     for &ln in &lengths {
       // Name for the function interned
       let name = format!("decode_{}_{}_{}", ut, wd, ln);
-      let ident = token::str_to_ident(&*name);
+      let ident = Ident::from_str(&*name);
       idents.push(token::Ident(ident));
       idents.push(token::Comma);
 
@@ -369,7 +376,7 @@ fn decode_expand(cx: &mut ExtCtxt,
             )
           }
         };
-        
+
         // While the available space is not enough...
         while o_bits > s_bits {
           o_bits -= s_bits;
@@ -402,7 +409,7 @@ fn decode_expand(cx: &mut ExtCtxt,
           );
           if s_bits == 0 {
             tokens = quote_tokens!(cx, $tokens
-              s_ptr = s_ptr.offset(1); 
+              s_ptr = s_ptr.offset(1);
             );
             s_bits = 32;
           }
@@ -431,7 +438,7 @@ fn decode_expand(cx: &mut ExtCtxt,
 
   // DECODE_T definition pushed to items
   let name = format!("decode_{}", ut).to_uppercase();
-  let ident = token::str_to_ident(&*name);
+  let ident = Ident::from_str(&*name);
   let len1 = lengths.len();
   let len2 = width + 1;
   items.push(
@@ -439,7 +446,7 @@ fn decode_expand(cx: &mut ExtCtxt,
       pub const $ident: [[unsafe fn(*const u32, *mut $ut); $len1]; $len2] = $ttree;
     ).unwrap()
   );
-  
+
   // DEBUGGING
   // for item in &items { println!("{}", pprust::item_to_string(item)); }
 
@@ -458,15 +465,16 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
       None => return DummyResult::expr(sp)
     }
   };
-  let ut = token::str_to_ident(&*format!("u{}", width));
+  let ut = Ident::from_str(&*format!("u{}", width));
   let lanes = 128 / width;
 
   // Construct full path to simd
   let mut simd = simd;
   simd.segments.push(
     ast::PathSegment {
-      identifier: token::str_to_ident(&*format!("u{}x{}", width, lanes)),
-      parameters: ast::PathParameters::none()
+      identifier: Ident::from_str(&*format!("u{}x{}", width, lanes)),
+      parameters: None,
+      span: Span::default(),
     }
   );
 
@@ -474,8 +482,9 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
   let mut load = simd.clone();
   load.segments.push(
     ast::PathSegment {
-      identifier: token::str_to_ident("load"),
-      parameters: ast::PathParameters::none()
+      identifier: Ident::from_str("load"),
+      parameters: None,
+      span: Span::default(),
     }
   );
 
@@ -486,7 +495,7 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
   for wd in 0..(width + 1) {
     // Name for the function interned
     let name = format!("encode_simd_{}_{}", ut, wd);
-    let ident = token::str_to_ident(&*name);
+    let ident = Ident::from_str(&*name);
     idents.push(token::Ident(ident));
     idents.push(token::Comma);
 
@@ -589,7 +598,7 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
 
   // ENCODE_SIMD_T definition pushed to items
   let name = format!("encode_simd_{}", ut).to_uppercase();
-  let ident = token::str_to_ident(&*name);
+  let ident = Ident::from_str(&*name);
   let len1 = width + 1;
   items.push(
     quote_item!(cx,
@@ -615,15 +624,16 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
       None => return DummyResult::expr(sp)
     }
   };
-  let ut = token::str_to_ident(&*format!("u{}", width));
+  let ut = Ident::from_str(&*format!("u{}", width));
   let lanes = 128 / width;
 
   // Construct full path to simd
   let mut simd = simd;
   simd.segments.push(
     ast::PathSegment {
-      identifier: token::str_to_ident(&*format!("u{}x{}", width, lanes)),
-      parameters: ast::PathParameters::none()
+      identifier: Ident::from_str(&*format!("u{}x{}", width, lanes)),
+      parameters: None,
+      span: Span::default(),
     }
   );
 
@@ -631,8 +641,9 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
   let mut splat = simd.clone();
   splat.segments.push(
     ast::PathSegment {
-      identifier: token::str_to_ident("splat"),
-      parameters: ast::PathParameters::none()
+      identifier: Ident::from_str("splat"),
+      parameters: None,
+      span: Span::default(),
     }
   );
 
@@ -640,8 +651,9 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
   let mut load = simd.clone();
   load.segments.push(
     ast::PathSegment {
-      identifier: token::str_to_ident("load"),
-      parameters: ast::PathParameters::none()
+      identifier: Ident::from_str("load"),
+      parameters: None,
+      span: Span::default(),
     }
   );
 
@@ -652,7 +664,7 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
   for wd in 0..(width + 1) {
     // Name for the function interned
     let name = format!("decode_simd_{}_{}", ut, wd);
-    let ident = token::str_to_ident(&*name);
+    let ident = Ident::from_str(&*name);
     idents.push(token::Ident(ident));
     idents.push(token::Comma);
 
@@ -766,14 +778,14 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
 
   // DECODE_SIMD_T definition pushed to items
   let name = format!("decode_simd_{}", ut).to_uppercase();
-  let ident = token::str_to_ident(&*name);
+  let ident = Ident::from_str(&*name);
   let len1 = width + 1;
   items.push(
     quote_item!(cx,
       pub const $ident: [unsafe fn(*const u32, *mut $ut); $len1] = $ttree;
     ).unwrap()
   );
-  
+
   // DEBUGGING
   // for item in &items { println!("{}", pprust::item_to_string(item)); }
 
@@ -791,8 +803,8 @@ fn encode_util_expand(cx: &mut ExtCtxt,
       None => return DummyResult::expr(sp)
     }
   };
-  let ut = token::str_to_ident(&*format!("u{}", width));
-  let it = token::str_to_ident(&*format!("i{}", width));
+  let ut = Ident::from_str(&*format!("u{}", width));
+  let it = Ident::from_str(&*format!("i{}", width));
   let lanes = 128 / width;
   let xsft = width - 1;
 
@@ -800,8 +812,9 @@ fn encode_util_expand(cx: &mut ExtCtxt,
   let mut simd = simd;
   simd.segments.push(
     ast::PathSegment {
-      identifier: token::str_to_ident(&*format!("i{}x{}", width, lanes)),
-      parameters: ast::PathParameters::none()
+      identifier: Ident::from_str(&*format!("i{}x{}", width, lanes)),
+      parameters: None,
+      span: Span::default(),
     }
   );
 
@@ -809,8 +822,9 @@ fn encode_util_expand(cx: &mut ExtCtxt,
   let mut load = simd.clone();
   load.segments.push(
     ast::PathSegment {
-      identifier: token::str_to_ident("load"),
-      parameters: ast::PathParameters::none()
+      identifier: Ident::from_str("load"),
+      parameters: None,
+      span: Span::default(),
     }
   );
 
@@ -819,7 +833,7 @@ fn encode_util_expand(cx: &mut ExtCtxt,
 
   // Name for the function interned
   let name = format!("encode_delta_{}", ut);
-  let ident = token::str_to_ident(&*name);
+  let ident = Ident::from_str(&*name);
 
   // SIMD SLOWER FOR FEW LANES
   items.push(
@@ -855,7 +869,7 @@ fn encode_util_expand(cx: &mut ExtCtxt,
 
   // Name for the function interned
   let name = format!("encode_zz_shift_{}", ut);
-  let ident = token::str_to_ident(&*name);
+  let ident = Ident::from_str(&*name);
 
   // SIMD HAS NO MEASURABLE EFFECT
   items.push(

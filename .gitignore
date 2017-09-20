@@ -1,0 +1,4 @@
+Cargo.lock
+
+# folder or link to rust sources to help with macro development, see mayda_macros/Cargo.toml
+compiler
