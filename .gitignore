@@ -1,4 +1,5 @@
 Cargo.lock
 
-# folder or link to rust sources to help with macro development, see mayda_macros/Cargo.toml
+# Directory containing rust sources to help with macro development.  Refer to
+# mayda_macros/Cargo.toml for further details.
 compiler

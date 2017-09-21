@@ -1,6 +1,6 @@
 [package]
 name = "mayda_macros"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Jeremy Mason <jkylemason@gmail.com>"]
 license = "MIT/Apache-2.0"
 description = "Macros to generate basic encoding and decoding functions used by mayda"
@@ -13,24 +13,26 @@ keywords = ["mayda", "compression"]
 name = "mayda_macros"
 plugin = true
 
-# UNCOMMENT THESE DEPS FOR DEV
-# trick helping with dev-time exploration of rust internals
-# from https://maikklein.github.io/post/rust-compiler/
+# Trick to help with dev-time exploration of rust internals from
+# https://maikklein.github.io/post/rust-compiler/
 #
-# but sobmodules make a grown man cry!
-# just clone the rust sources yourself to the .gitignored "compiler" subfolder
+# Clone the rust sources to the .gitignored "compiler" subfolder
 # ```
-# git clone git@github.com:rust-lang/rust.git compiler"
+# git clone git@github.com:rust-lang/rust.git "compiler"
 # ```
-# and checkout the rust revision at the time that most closely matches the one in rust-toolchain file
+# and checkout the rust revision that most closely matches the one in the
+# rust-toolchain file
 # ```
 # cat rust-toolchain
 #     >> "nightly-2017-06-13"
-# cd compiler
+# cd "compiler"
 # git checkout 'master@{2017-06-13 03:00:00}
 # ```
-#[target.'cfg(IGNORE_DEV_SOURCE_PATH_ONLY)'.dependencies]
-#rustc = {path = "../compiler/src/librustc/"}
-#rustc_plugin = {path = "../compiler/src/librustc_plugin/"}
-#syntax = {path = "../compiler/src/libsyntax/"}
-#syntax_pos = {path = "../compiler/src/libsyntax_pos/"}
+# 
+# UNCOMMENT THE DEPS BELOW FOR DEV
+# 
+# [target.'cfg(IGNORE_DEV_SOURCE_PATH_ONLY)'.dependencies]
+# rustc = {path = "../compiler/src/librustc/"}
+# rustc_plugin = {path = "../compiler/src/librustc_plugin/"}
+# syntax = {path = "../compiler/src/libsyntax/"}
+# syntax_pos = {path = "../compiler/src/libsyntax_pos/"}

@@ -17,9 +17,10 @@ at a little less than half the speed, but can have much better compression
 ratios depending on the distribution of the integers. Overall performance is
 comparable to the fastest (known) libraries in any language.
 
-Compiling `mayda` requires the **nightly** compiler and CPU support for the
-SSE2 instruction set (any Intel or AMD processor manufactured after 2003). The
-basic approach is further described in [Zukowski2006] and [Lemire2015].
+Compiling `mayda` requires a **nightly** compiler and CPU support for the SSE2
+instruction set (any Intel or AMD processor manufactured after 2003). The
+compiler version is further specified in `./rust-toolchain` for reproducibility.
+The basic approach is described in [Zukowski2006] and [Lemire2015].
 
 ### Documentation
 
@@ -32,7 +33,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-mayda = "^0.2"
+mayda = "0.2"
 ```
 
 and this to your crate root:
@@ -144,30 +145,30 @@ respect for the general case.
 
 |          | Encode (BInt/s) | Decode (BInt/s) | Index (ns) | Bits/Int |
 |----------|-----------------|-----------------|------------|----------|
-| Uniform  |       1.27      |       5.92      |     28     |   10.63  |
-| Monotone |       1.18      |       2.35      |     69     |   32.63  |
-| Unimodal |       0.21      |       2.23      |     55     |   11.16  |
-| Native   |      20.08      |      20.08      |      0     |    32    |
+| Uniform  |       1.28      |       5.75      |     26     |   10.63  |
+| Monotone |       1.34      |       2.49      |     63     |   32.63  |
+| Unimodal |       0.21      |       2.01      |     59     |   11.16  |
+| Native   |      26.26      |      26.26      |      0     |    32    |
 
 For `input2` the Shannon entropy is 10.00, but the additional structure is used
 by `Monotone` to improve compression.
 
 |          | Encode (BInt/s) | Decode (BInt/s) | Index (ns) | Bits/Int |
 |----------|-----------------|-----------------|------------|----------|
-| Uniform  |       1.28      |       6.06      |     28     |   8.00   |
-| Monotone |       1.24      |       2.27      |     67     |   3.63   |
-| Unimodal |       0.24      |       2.57      |     30     |   8.19   |
-| Native   |      20.08      |      20.08      |      0     |    32    |
+| Uniform  |       1.23      |       5.88      |     26     |   8.00   |
+| Monotone |       1.42      |       2.42      |     69     |   3.63   |
+| Unimodal |       0.24      |       2.07      |     27     |   8.19   |
+| Native   |      26.26      |      26.26      |      0     |    32    |
 
 For `input3` the Shannon entropy is 12.46, but compression is difficult due to
 the presence of outliers. `Unimodal` gives the most robust compression.
 
 |          | Encode (BInt/s) | Decode (BInt/s) | Index (ns) | Bits/Int |
 |----------|-----------------|-----------------|------------|----------|
-| Uniform  |       1.23      |       6.21      |     28     |   32.63  |
-| Monotone |       1.18      |       2.35      |     70     |   32.63  |
-| Unimodal |       0.16      |       1.68      |     60     |   12.50  |
-| Native   |      20.08      |      20.08      |      0     |    32    |
+| Uniform  |       1.26      |       6.10      |     26     |   32.63  |
+| Monotone |       1.35      |       2.49      |     65     |   32.63  |
+| Unimodal |       0.18      |       1.67      |     61     |   12.50  |
+| Native   |      26.26      |      26.26      |      0     |    32    |
 
 ## License
 
@@ -183,6 +184,10 @@ at your option.
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall
 be dual licensed as above, without any additional terms or conditions.
+
+### Contributors
+
+Francis Lalonde
 
 [//]: #
    [`Uniform`]: <https://harharkh.github.io/mayda/mayda/uniform/index.html>
