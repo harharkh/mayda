@@ -1,5 +1,5 @@
 language: rust
-rust: nightly
+rust: nightly-2017-09-10
 
 env:
   global:
