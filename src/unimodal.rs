@@ -1378,7 +1378,7 @@ impl<B: Bits> Access<ops::RangeToInclusive<usize>> for Unimodal<B> {
 
   #[inline]
   fn access(&self, range: ops::RangeToInclusive<usize>) -> Vec<B> {
-    self.access(0...range.end)
+    self.access(0..=range.end)
   }
 }
 
@@ -1446,7 +1446,7 @@ impl<B: Bits> AccessInto<ops::RangeInclusive<usize>, B> for Unimodal<B> {
 impl<B: Bits> AccessInto<ops::RangeToInclusive<usize>, B> for Unimodal<B> {
   #[inline]
   fn access_into(&self, range: ops::RangeToInclusive<usize>, output: &mut [B]) -> usize {
-    self.access_into(0...range.end, output)
+    self.access_into(0..=range.end, output)
   }
 }
 
