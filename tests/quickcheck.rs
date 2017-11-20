@@ -348,7 +348,7 @@ macro_rules! range_inclusive {
         let mut lwr = lwr % input.len();
         let mut upr = upr % input.len();
         if lwr > upr { std::mem::swap(&mut lwr, &mut upr); }
-        if input[lwr...upr] != *bin.access(lwr...upr) {
+        if input[lwr..=upr] != *bin.access(lwr..=upr) {
           return false
         }
       }

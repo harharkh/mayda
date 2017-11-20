@@ -299,7 +299,7 @@ macro_rules! increasing_values {
     #[test]
     fn $name() {
       let mut bin = Monotone::new();
-      let input: Vec<$t> = ($min...$max).collect();
+      let input: Vec<$t> = ($min..=$max).collect();
       println!("{:?}", input);
       bin.encode(&input).unwrap();
       for a in bin.storage() { println!("{:032b}", a); }
@@ -602,9 +602,9 @@ macro_rules! range_inclusive {
       bin.encode(&input).unwrap();
       for a in bin.storage() { println!("{:032b}", a); }
       for a in 0..($length - $width) {
-        let vec = bin.access(a...($width + a));
-        println!("{:?} {:?}", &input[a...($width + a)], &vec[..]);
-        assert_eq!(&input[a...($width + a)], &vec[..]);
+        let vec = bin.access(a..=($width + a));
+        println!("{:?} {:?}", &input[a..=($width + a)], &vec[..]);
+        assert_eq!(&input[a..=($width + a)], &vec[..]);
       }
     }
   )*)
