@@ -148,6 +148,7 @@
 #![feature(specialization)]
 
 extern crate mayda_codec;
+extern crate heapsize;
 
 pub mod error;
 pub mod monotone;

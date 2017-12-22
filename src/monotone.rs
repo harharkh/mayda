@@ -41,6 +41,7 @@ use std::{mem, ops, ptr, usize};
 
 use mayda_codec;
 use utility::{self, Bits, Encode, Access, AccessInto};
+use heapsize::HeapSizeOf;
 
 const E_WIDTH: u32 = 0x0000007f;
 const E_COUNT: u32 = 0x00007f80;
@@ -101,6 +102,13 @@ const E_COUNT: u32 = 0x00007f80;
 pub struct Monotone<B> {
   storage: Box<[u32]>,
   phantom: PhantomData<B>
+}
+
+impl<B> HeapSizeOf for Monotone<B> {
+    fn heap_size_of_children(&self) -> usize {
+        if self.storage.is_empty() { return 0 }
+        self.storage.heap_size_of_children()
+    }
 }
 
 impl<B: Bits> Monotone<B> {
