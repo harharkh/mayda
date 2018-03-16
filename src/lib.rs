@@ -143,6 +143,7 @@
 //! That said, the situation is the same for any of the data structures in the
 //! standard library (consider the `set_len` method of a `Vec`).
 
+#![feature(inclusive_range_fields)]
 #![feature(inclusive_range)]
 #![feature(inclusive_range_syntax)]
 #![feature(specialization)]
