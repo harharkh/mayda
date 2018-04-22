@@ -155,6 +155,24 @@ impl<B: Bits> Uniform<B> {
     }
   }
 
+  /// Recreates a `Uniform` object from it's underlying storage.
+  ///
+  /// # Examples
+  /// ```
+  /// use mayda::{Encode, Uniform};
+  ///
+  /// let bits = Uniform::from_slice(&[1, 5, 7, 15, 20, 27]).unwrap();
+  /// let bits_from_storage = Uniform::from_storage(bits.storage().to_vec().into_boxed_slice());
+  ///
+  /// assert_eq!(bits.decode(), bits_from_storage.decode());
+  /// ```
+  #[inline]
+  pub fn from_storage(vals: Box<[u32]>) -> Self {
+    let mut bits = Self::new();
+    bits.storage = vals;
+    bits
+  }
+
   /// Returns true when there are no encoded entries.
   ///
   /// # Examples

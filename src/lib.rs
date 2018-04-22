@@ -145,7 +145,6 @@
 
 #![feature(inclusive_range_fields)]
 #![feature(inclusive_range)]
-#![feature(inclusive_range_syntax)]
 #![feature(specialization)]
 
 extern crate mayda_codec;
