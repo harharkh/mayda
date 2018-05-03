@@ -1181,7 +1181,7 @@ impl<B: Bits> Access<ops::RangeInclusive<usize>> for Uniform<B> {
 
   #[inline]
   fn access(&self, range: ops::RangeInclusive<usize>) -> Vec<B> {
-    self.access(range.start..(range.end + 1))
+    self.access(*range.start()..(*range.end() + 1))
   }
 }
 
@@ -1251,7 +1251,7 @@ impl<B: Bits> AccessInto<ops::RangeFull, B> for Uniform<B> {
 impl<B: Bits> AccessInto<ops::RangeInclusive<usize>, B> for Uniform<B> {
   #[inline]
   fn access_into(&self, range: ops::RangeInclusive<usize>, output: &mut [B]) -> usize {
-    self.access_into(range.start..(range.end + 1), output)
+    self.access_into(*range.start()..(*range.end() + 1), output)
   }
 }
 
