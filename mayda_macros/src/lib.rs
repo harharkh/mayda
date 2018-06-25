@@ -473,7 +473,7 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
   simd.segments.push(
     ast::PathSegment {
       ident: Ident::from_str(&*format!("u{}x{}", width, lanes)),
-      parameters: None,
+      args: None,
     }
   );
 
@@ -482,7 +482,7 @@ fn encode_simd_expand(cx: &mut ExtCtxt,
   load.segments.push(
     ast::PathSegment {
       ident: Ident::from_str("load"),
-      parameters: None,
+      args: None,
     }
   );
 
@@ -630,7 +630,7 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
   simd.segments.push(
     ast::PathSegment {
       ident: Ident::from_str(&*format!("u{}x{}", width, lanes)),
-      parameters: None,
+      args: None,
     }
   );
 
@@ -639,7 +639,7 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
   splat.segments.push(
     ast::PathSegment {
       ident: Ident::from_str("splat"),
-      parameters: None,
+      args: None,
     }
   );
 
@@ -648,7 +648,7 @@ fn decode_simd_expand(cx: &mut ExtCtxt,
   load.segments.push(
     ast::PathSegment {
       ident: Ident::from_str("load"),
-      parameters: None,
+      args: None,
     }
   );
 
@@ -808,7 +808,7 @@ fn encode_util_expand(cx: &mut ExtCtxt,
   simd.segments.push(
     ast::PathSegment {
       ident: Ident::from_str(&*format!("i{}x{}", width, lanes)),
-      parameters: None,
+      args: None,
     }
   );
 
@@ -817,7 +817,7 @@ fn encode_util_expand(cx: &mut ExtCtxt,
   load.segments.push(
     ast::PathSegment {
       ident: Ident::from_str("load"),
-      parameters: None,
+      args: None,
     }
   );
 
