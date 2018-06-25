@@ -15,9 +15,10 @@ name = "mayda"
 
 [dependencies]
 mayda_codec = { path = "mayda_codec", version = "0.1" }
+heapsize = "0.4.1"
 
 [dev-dependencies]
 num = "0.1"
-quickcheck = "0.4"
-quickcheck_macros = "0.4"
+quickcheck = "0.6.1"
+quickcheck_macros = "0.6.1"
 rand = "0.3"

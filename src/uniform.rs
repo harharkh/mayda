@@ -42,6 +42,7 @@ use std::{mem, ops, ptr, usize};
 
 use mayda_codec;
 use utility::{self, Bits, Encode, Access, AccessInto};
+use heapsize::HeapSizeOf;
 
 const E_WIDTH: u32 = 0x0000007f;
 const E_COUNT: u32 = 0x00007f80;
@@ -104,6 +105,13 @@ pub struct Uniform<B> {
   phantom: PhantomData<B>
 }
 
+impl<B> HeapSizeOf for Uniform<B> {
+    fn heap_size_of_children(&self) -> usize {
+        if self.storage.is_empty() { return 0 }
+        self.storage.heap_size_of_children()
+    }
+}
+
 impl<B: Bits> Uniform<B> {
   /// Creates an empty `Uniform` object.
   ///
@@ -145,6 +153,24 @@ impl<B: Bits> Uniform<B> {
       Err(error) => Err(error),
       Ok(()) => Ok(bits)
     }
+  }
+
+  /// Recreates a `Uniform` object from it's underlying storage.
+  ///
+  /// # Examples
+  /// ```
+  /// use mayda::{Encode, Uniform};
+  ///
+  /// let bits = Uniform::from_slice(&[1, 5, 7, 15, 20, 27]).unwrap();
+  /// let bits_from_storage = Uniform::from_storage(bits.storage().to_vec().into_boxed_slice());
+  ///
+  /// assert_eq!(bits.decode(), bits_from_storage.decode());
+  /// ```
+  #[inline]
+  pub fn from_storage(vals: Box<[u32]>) -> Self {
+    let mut bits = Self::new();
+    bits.storage = vals;
+    bits
   }
 
   /// Returns true when there are no encoded entries.
@@ -1155,7 +1181,7 @@ impl<B: Bits> Access<ops::RangeInclusive<usize>> for Uniform<B> {
 
   #[inline]
   fn access(&self, range: ops::RangeInclusive<usize>) -> Vec<B> {
-    self.access(range.start..(range.end + 1))
+    self.access(*range.start()..(*range.end() + 1))
   }
 }
 
@@ -1225,7 +1251,7 @@ impl<B: Bits> AccessInto<ops::RangeFull, B> for Uniform<B> {
 impl<B: Bits> AccessInto<ops::RangeInclusive<usize>, B> for Uniform<B> {
   #[inline]
   fn access_into(&self, range: ops::RangeInclusive<usize>, output: &mut [B]) -> usize {
-    self.access_into(range.start..(range.end + 1), output)
+    self.access_into(*range.start()..(*range.end() + 1), output)
   }
 }
 

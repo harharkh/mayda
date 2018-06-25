@@ -3,3 +3,6 @@ Cargo.lock
 # Directory containing rust sources to help with macro development.  Refer to
 # mayda_macros/Cargo.toml for further details.
 compiler
+
+mayda_macros/target/
+target/
